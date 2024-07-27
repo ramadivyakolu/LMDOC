@@ -1,0 +1,21 @@
+Contract ID				PROJ		USR00		Contract ID from PROJ table
+Billing WBS Element         		PRPS		POST1		Billing element  Level 2 from table PRPS
+Total Sales 				Program logic	summed value	Calculated sum
+Qualifying Sales			Program logic	summed value	Calculated sum
+Non-Qualifying Sales			Program logic	summed value	Calculated sum
+Direct Cost   				Program logic	summed value	Calculated sum
+Qualifying Direct Cost 			Program logic	summed value	Calculated sum
+Total Pool Cost  			Program logic	summed value	Calculated sum
+Total Qualifying Pool Cost   		Program logic	summed value	Calculated sum
+Total Administrative Cost  		Program logic	summed value	Calculated sum
+Qualifying Administrative Cost(4%)  	Program logic	summed value	Calculated sum
+Total Qualifying Cost     		Program logic	summed value	Calculated sum
+Manufacturing Pool Cost     		Program logic	summed value	Calculated sum
+Qualifying Manufacturing Pool Cost  	Program logic	summed value	Calculated sum
+Administrative Cost			Program logic	summed value	Calculated sum
+Engineering Pool Cost   		Program logic	summed value	Calculated sum
+Qualifying Engineering Pool Cost  	Program logic	summed value	Calculated sum
+Administrative Cost  			Program logic	summed value	Calculated sum
+G&A Pool Cost  				Program logic	summed value	Calculated sum
+Qualifying G&A Pool Cost		Program logic	summed value	Calculated sum
+Administrative Cost			Program logic	summed value	Calculated sum
