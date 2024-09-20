@@ -1,0 +1,76 @@
+Open in ABAP Development Tools
+Data Definition P_CHNG_DOC_UNBLOCK_INVOICE [DS4, 100]
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+@AbapCatalog.sqlViewName: 'PCHNGDUI'
+@AbapCatalog.compiler.compareFilter: true
+@AbapCatalog.preserveKey:true 
+@AccessControl.authorizationCheck: #PRIVILEGED_ONLY
+@AccessControl.personalData.blocking: #REQUIRED
+@ClientHandling.algorithm: #SESSION_VARIABLE
+//@EndUserText.label: 'Change Doc info for unblocked invoices (FI)'
+@VDM.viewType: #BASIC
+@VDM.private: true
+@VDM.lifecycle.contract.type: #NONE 
+@VDM.lifecycle.status: #DEPRECATED
+define view P_CHNG_DOC_UNBLOCK_INVOICE
+  as select from cdpos
+    inner join   cdhdr as _cdhdr on  cdpos.objectid   = _cdhdr.objectid
+                                 and cdpos.objectclas = _cdhdr.objectclas
+                                 and cdpos.changenr   = _cdhdr.changenr
+{
+  key cdpos.objectclas                                                    as ObjectClass,
+  key cdpos.objectid                                                      as ObjectID,
+  key cdpos.changenr                                                      as ChangeNumber,
+  key cdpos.tabkey                                                        as TableKey,
+  key cdpos.fname                                                         as FieldName,
+      _cdhdr.udate                                                        as DateOfUpdate,
+      cast( substring( cdpos.tabkey, 4, 4) as bukrs preserving type )     as CompanyCode,
+      cast( substring( cdpos.tabkey, 8, 10) as belnr_fi preserving type ) as AccountingDocument,
+      cast( substring( cdpos.tabkey, 18, 4) as gjahr )                    as FiscalYear,
+      cast( substring( cdpos.tabkey, 22, 3) as buzei )                    as AccountingDocumentItem
+ 
+ 
+}
+where
+      cdpos.objectclas = 'BELEG'
+  and tabname          = 'BSEG'
+  and fname            = 'ZLSPR'
+  and value_old        = 'R'
+  and value_new        = ''
+  and chngind          = 'U'
