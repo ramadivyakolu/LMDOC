@@ -1,0 +1,1298 @@
+REPORT z_rsscd100_2 MESSAGE-ID cd
+                    NO STANDARD PAGE HEADING
+                    LINE-SIZE 400.
+***********************************************************************
+*   Program Name:       Z_RSSCD100_2                                  *
+*   Program Title;      SD documents change log                       *
+*   Programmer:         Joe Lam                                       *
+*   Date:               02/10/05                                      *
+*   Source Code Type:   Report (copy from Z_RSSCD100)                 *
+*   Orig Tech Spec:     SAP module RSSCD100                           *
+*                                                                     *
+*   Extract of SAP change document for sales orders.                  *
+*---------------------------------------------------------------------*
+*                     MODIFICATION LOG:                               *
+*                                                                     *
+*  Corr. No.  Date      Programmer   -----------Description-----------*
+* ---------- -------- -------------- ---------------------------------*
+* Original   02/10/05 Joe Lam        DEVK905574 Initial revision.     *
+* ---------- -------- -------------- ---------------------------------*
+* DEVK907093 05/31/05 Edward Hall    Check user's authority to        *
+*                                    display sales organization       *
+*                                    information via authorization    *
+*                                    object V_VBAK_VKO.               *
+* DM1K954986 11/20/13 Kay Leaman     INC 10313592	- Fix          *
+*                                    performance issues               *
+* DM1K956555 06/11/15 Kay Leaman     INC 12570231 - EHP7 - Clarify    *
+*                                    column headings for key length   *
+*                                    and version (new field)          *
+* DM3K927194 08/12/19 Don Wigginton  INC1404784 - Bypass sales order  *
+*                                    type 'ZLSO' (Operations Sales    *
+*                                    Order).                          *
+***********************************************************************
+
+* Table declaration
+TABLES : vbak,
+         vbap,
+         prps,
+         t001,       " DM1K954986
+         tvko.       " DM1K954986
+
+*$*$ DATA INCLUDES: ALV
+*$*$ Type pools
+TYPE-POOLS: slis.                         "for ALV
+*$*$     DATA FOR ALV LIST VIEWER
+* The following definitions can be used to change the presentation
+* of the output
+DATA: repid       LIKE sy-repid VALUE 'Z_RSSCD100_2'.
+DATA: keyinfo     TYPE slis_keyinfo_alv.
+DATA: color       TYPE slis_t_specialcol_alv WITH HEADER LINE.
+DATA: layout      TYPE slis_layout_alv.
+DATA: print       TYPE slis_print_alv.
+DATA: sort        TYPE slis_t_sortinfo_alv WITH HEADER LINE.
+DATA: excluding   TYPE slis_t_extab WITH HEADER LINE.
+
+* field catalog
+DATA: fieldcat    TYPE slis_t_fieldcat_alv WITH HEADER LINE.
+DATA: fieldcat_t  TYPE slis_t_fieldcat_alv WITH HEADER LINE.
+
+DATA: variante    LIKE disvariant.
+
+DATA: i_slis_exit_by_user TYPE slis_exit_by_user.
+
+*--- excluding table for pf-status
+TYPES: slis_t_extab TYPE slis_extab OCCURS 1.
+*$*$     END DATA DECLARATIONS FOR ALV
+
+*** Selection screen
+SELECTION-SCREEN BEGIN OF BLOCK frame2 WITH FRAME TITLE text-011.
+PARAMETERS: objekt   LIKE cdhdr-objectclas OBLIGATORY DEFAULT
+                                                'VERKBELEG',
+            objektid LIKE cdhdr-objectid NO-DISPLAY,
+            aenderer LIKE cdhdr-username,
+            datum    LIKE cdhdr-udate MEMORY ID zd1,
+            zeit     LIKE cdhdr-utime,
+            dat_bis  TYPE cdhdr-udate MEMORY ID zd2 DEFAULT sy-datum,
+            zeit_bis TYPE cdhdr-utime    DEFAULT '235959',
+            nummer   LIKE cdhdr-changenr DEFAULT ' ' NO-DISPLAY,
+            tabname  LIKE cdpos-tabname  DEFAULT ' ' NO-DISPLAY,
+            tabkey   LIKE cdpos-tabkey   DEFAULT ' ' NO-DISPLAY,
+            key_exp  TYPE c              DEFAULT ' ' NO-DISPLAY.
+*            new_disp AS CHECKBOX         DEFAULT 'X'.
+SELECTION-SCREEN END OF BLOCK frame2.
+
+SELECTION-SCREEN BEGIN OF BLOCK frame1 WITH FRAME TITLE text-010.
+SELECT-OPTIONS: vkorg    FOR  vbak-vkorg.
+PARAMETERS:     pbukrs   LIKE t001-bukrs.   " DM1K954986
+SELECT-OPTIONS: wbs_elem FOR  vbap-ps_psp_pnr,
+                bstnk    FOR  vbak-bstnk,
+                ihrez    FOR  vbak-ihrez,
+                zz_cust  FOR  vbak-zz_cust_orderno,
+                svbeln   FOR  vbak-vbeln MEMORY ID aun.
+
+SELECTION-SCREEN END OF BLOCK frame1.
+*** Variables
+DATA : buffer(67) TYPE c.
+DATA : lmandt(3).                       " DM1K954986
+
+DATA : new_disp TYPE char1 VALUE 'X' .  " DM1K954986
+
+DATA: BEGIN OF ausg OCCURS 50.             "Ausgabeaufbereitung
+        INCLUDE STRUCTURE cdshw.
+      DATA: END OF ausg.
+
+DATA: BEGIN OF icdhdr OCCURS 50.           "Ausgabeaufbereitung
+        INCLUDE STRUCTURE cdhdr.
+      DATA: END OF icdhdr.
+
+DATA: BEGIN OF all_keys OCCURS 500.         "alle Keyfelder aller Tab.
+        INCLUDE STRUCTURE dfies.
+        DATA:   placement TYPE i,
+        length    TYPE i,
+        text      TYPE c.
+DATA: END OF all_keys.
+
+DATA: BEGIN OF idfies OCCURS 500.           "Schnittstelle NAMETAB_GET
+        INCLUDE STRUCTURE dfies.
+      DATA: END OF idfies.
+
+* DM1K954986 - Begin
+DATA: BEGIN OF i_vbeln OCCURS 0,
+        doc_no(10),
+      END OF i_vbeln.
+* DM1K954986 - End
+
+DATA: list     TYPE c,
+      count1   TYPE i,
+      count2   TYPE i,
+      ls_cdhdr TYPE cdhdr,
+      w_vkorg  TYPE vbak-vkorg,    " DM1K954986
+      w_posnr  TYPE vbap-posnr.    " DM1K954986
+
+* prepared output with header info
+DATA: BEGIN OF itab OCCURS 0,
+        vkorg    LIKE vbak-vkorg,
+        bukrs    LIKE t001-bukrs,  " DM1K954986
+        wbs_elem LIKE vbap-ps_psp_pnr,
+        bstnk    LIKE vbak-bstnk,
+        ihrez    LIKE vbak-ihrez,
+        zz_cust  LIKE vbak-zz_cust_orderno,
+        vbeln    LIKE vbap-vbeln,
+        posnr    LIKE vbap-posex.
+        INCLUDE STRUCTURE cdred.
+      DATA: END OF itab.
+
+DATA: editpos_with_header LIKE cdred OCCURS 0 WITH HEADER LINE,
+      pos2                LIKE cdred OCCURS 0      " DM1K954986
+                          WITH HEADER LINE,        " DM1K954986
+      applicationid       TYPE repid.
+
+* DM1K954986 - Begin
+* itab i_obj to carry objectid(10), which is vbeln values
+DATA: BEGIN OF i_obj OCCURS 0,
+        vbeln LIKE vbak-vbeln,
+      END OF i_obj.
+* DM1K954986 - End
+
+TYPES: BEGIN OF int_sales_info,
+         vkorg           LIKE vbak-vkorg,
+         vbeln           LIKE vbak-vbeln,
+         posnr           LIKE vbap-posnr,  " DM1K954986
+         pspnr           LIKE vbap-ps_psp_pnr,
+         bstnk           LIKE vbak-bstnk,
+         ihrez           LIKE vbak-ihrez,
+         zz_cust_orderno LIKE vbak-zz_cust_orderno,
+         fplnr           LIKE vbrp-fplnr,  " DM1K954986
+       END OF int_sales_info.
+
+DATA: int_sales_info   TYPE STANDARD TABLE OF int_sales_info.
+
+TYPES: BEGIN OF ty_vkorg,
+         vkorg LIKE vbak-vkorg,
+         bukrs LIKE t001-bukrs, " DM1K954986
+       END OF ty_vkorg.
+
+DATA: tbl_vkorg        TYPE STANDARD TABLE OF ty_vkorg WITH HEADER LINE.
+DATA: w_valid_vkorg    TYPE i.   " DM1K954986
+
+CONSTANTS:
+  c_e           TYPE char1          VALUE 'E',
+  c_eq          TYPE char2          VALUE 'EQ',
+  c_s           TYPE char1          VALUE 'S',
+  c_so_log_type TYPE tvarvc-name    VALUE 'ZSD_LOGISTICS_SO_TYPE'.
+
+* Table of Variant Variables (Client-Specific)
+DATA: tbl_xsoty TYPE STANDARD TABLE OF tvarvc,
+      wa_xsoty  TYPE tvarvc.
+
+DATA:
+  r_auart  TYPE RANGE OF vbak-auart,
+  wr_auart TYPE wtysc_wwb_s_auart.
+
+FIELD-SYMBOLS: <f> TYPE c
+              ,<f_ausg>  TYPE cdshw
+              .
+
+RANGES: r_vkorg FOR vbak-vkorg.
+
+INITIALIZATION.
+
+  AUTHORITY-CHECK OBJECT 'S_SCD0'
+                  ID 'ACTVT' FIELD '08'.
+  IF sy-subrc NE 0.
+    MESSAGE s800.
+    LEAVE.
+  ENDIF.
+
+  REFRESH: itab.
+  CLEAR: itab.
+
+  LOOP AT SCREEN.
+    IF screen-name EQ 'OBJEKT'.
+      screen-input = 0.
+      MODIFY SCREEN.
+    ENDIF.
+  ENDLOOP.
+
+  GET PARAMETER ID 'CDO' FIELD objekt.
+  GET PARAMETER ID 'ZD1' FIELD datum.
+  GET PARAMETER ID 'ZD2' FIELD dat_bis.
+  IF sy-subrc NE 0.
+    MOVE sy-datum TO dat_bis.
+  ENDIF.
+  IF objekt = space.
+    objekt = 'VERKBELEG'.
+    SET PARAMETER ID 'CDO' FIELD objekt.
+    datum  = '00000000'.
+    SET PARAMETER ID 'CDD' FIELD datum.
+    zeit   = '000000'.
+  ELSE.
+*    GET PARAMETER ID 'CDI' FIELD objektid.
+    GET PARAMETER ID 'CDU' FIELD aenderer.
+    GET PARAMETER ID 'CDD' FIELD datum.
+    GET PARAMETER ID 'CDN' FIELD nummer.
+    GET PARAMETER ID 'CDT' FIELD tabname.
+    GET PARAMETER ID 'CDK' FIELD tabkey.
+  ENDIF.
+
+AT SELECTION-SCREEN.
+*-----------------------------------------------------------------------
+* Check user's aurhority to display sales organization information via
+* authorization object V_VBAK_VKO.
+*-----------------------------------------------------------------------
+
+* DM1K954986 - Begin
+  IF NOT pbukrs IS INITIAL.
+    SELECT SINGLE bukrs
+      INTO t001-bukrs
+      FROM t001
+     WHERE bukrs = pbukrs.
+    IF sy-subrc <> 0.
+      MESSAGE e000(zsd) WITH text-009.
+    ENDIF.
+  ENDIF.
+* DM1K954986 - End
+
+* Build table of allowable Sales Orgs VKORG
+  IF vkorg IS INITIAL.
+    IF pbukrs IS INITIAL.  " DM1K954986
+      SELECT vkorg bukrs   " DM1K954986
+        INTO CORRESPONDING FIELDS OF TABLE tbl_vkorg
+        FROM tvko.
+*   DM1K954986 - Begin
+    ELSE.
+      SELECT vkorg bukrs
+        INTO CORRESPONDING FIELDS OF TABLE tbl_vkorg
+        FROM tvko
+       WHERE bukrs = pbukrs.
+    ENDIF.
+*   DM1K954986 - End
+
+  ELSE.
+    IF pbukrs IS INITIAL.  " DM1K954986
+      SELECT vkorg bukrs     " DM1K954986
+        INTO CORRESPONDING FIELDS OF TABLE tbl_vkorg
+        FROM tvko
+       WHERE vkorg IN vkorg.
+*   DM1K954986 - Begin
+    ELSE.
+
+      SELECT vkorg bukrs
+        INTO CORRESPONDING FIELDS OF TABLE tbl_vkorg
+        FROM tvko
+       WHERE vkorg IN vkorg.
+
+      CLEAR tbl_vkorg.
+
+      SELECT vkorg bukrs
+        INTO (tbl_vkorg-vkorg, tbl_vkorg-bukrs)
+        FROM tvko
+       WHERE bukrs = pbukrs.
+        APPEND tbl_vkorg.
+        CLEAR  tbl_vkorg.
+      ENDSELECT.
+
+    ENDIF.
+*   DM1K954986 - End
+
+  ENDIF.
+
+  REFRESH r_vkorg.
+  r_vkorg[] = vkorg[].
+  LOOP AT tbl_vkorg.
+    AUTHORITY-CHECK OBJECT 'V_VBAK_VKO'
+              ID 'VKORG' FIELD tbl_vkorg-vkorg
+              ID 'VTWEG' DUMMY
+              ID 'SPART' DUMMY
+              ID 'ACTVT' FIELD '03'.
+    IF sy-subrc <> 0.
+      r_vkorg-sign = 'E'.
+      r_vkorg-option = 'EQ'.
+      r_vkorg-low = tbl_vkorg-vkorg.
+      APPEND r_vkorg.
+      CLEAR r_vkorg.
+*   DM1K954986 - Begin
+    ELSE.
+      r_vkorg-sign = 'I'.
+      r_vkorg-option = 'EQ'.
+      r_vkorg-low = tbl_vkorg.
+      APPEND r_vkorg.
+      CLEAR r_vkorg.
+
+      IF NOT pbukrs IS INITIAL.
+        ADD 1 TO w_valid_vkorg.
+      ENDIF.
+*   DM1K954986 - End
+    ENDIF.
+  ENDLOOP.
+
+* DM1K954986 - Begin
+* When Company is set in parameter pbukrs, requires extra check
+  IF NOT pbukrs IS INITIAL.
+    IF w_valid_vkorg = 0.
+      MESSAGE e010(zsd) WITH text-009.
+    ENDIF.
+  ENDIF.
+* DM1K954986 - End
+
+START-OF-SELECTION.
+
+  PERFORM build_so_doc_type_range.
+
+  SET PARAMETER ID 'CDO' FIELD objekt.
+*  SET PARAMETER ID 'CDI' FIELD objektid.
+  SET PARAMETER ID 'CDU' FIELD aenderer.
+  SET PARAMETER ID 'CDD' FIELD datum.
+  SET PARAMETER ID 'CDN' FIELD nummer.
+  SET PARAMETER ID 'CDT' FIELD tabname.
+  SET PARAMETER ID 'CDK' FIELD tabkey.
+
+  SET PF-STATUS 'SELT'.
+  SET TITLEBAR '100' WITH objekt.
+
+* DM1K954986 - Begin
+  IF r_vkorg[]  IS NOT INITIAL OR
+     wbs_elem[] IS NOT INITIAL OR
+     bstnk[]    IS NOT INITIAL OR
+     ihrez[]    IS NOT INITIAL OR
+     zz_cust[]  IS NOT INITIAL OR
+     svbeln[]   IS NOT INITIAL.
+    SELECT vbak~vbeln
+      INTO TABLE i_vbeln
+      FROM vbak INNER JOIN vbap
+        ON vbak~vbeln = vbap~vbeln
+     WHERE vbak~vbeln           IN svbeln
+       AND vbak~auart           IN r_auart
+       AND vbak~vkorg           IN r_vkorg
+       AND vbak~bstnk           IN bstnk
+       AND vbak~ihrez           IN ihrez
+       AND vbak~zz_cust_orderno IN zz_cust
+       AND vbap~ps_psp_pnr      IN wbs_elem.
+    IF i_vbeln[] IS INITIAL.
+      WRITE text-101.
+      EXIT.
+    ENDIF.
+  ENDIF.
+* DM1K954986 - End
+
+* If user chose to display output on ALV grid.
+  IF new_disp = 'X'.
+*   DM1K954986 - Begin
+    IF i_vbeln[] IS INITIAL.
+      PERFORM read_changedocs.
+    ELSE.
+      REFRESH pos2.
+      LOOP AT i_vbeln.
+        REFRESH editpos_with_header.
+        objektid = i_vbeln-doc_no.
+        PERFORM read_changedocs.
+        APPEND LINES OF editpos_with_header TO pos2.
+      ENDLOOP.
+      editpos_with_header[] = pos2[].
+    ENDIF.
+    IF editpos_with_header[] IS INITIAL.
+      WRITE text-101.
+    ELSE.
+*   DM1K954986 - End
+      PERFORM sales_selection_filter TABLES int_sales_info.
+      PERFORM list_output.
+    ENDIF.
+
+* Else user chose to display output in standard SAP list report
+  ELSE. "new_disp = ' '.
+    CALL FUNCTION 'CHANGEDOCUMENT_READ_HEADERS'
+      EXPORTING
+        objectclass       = objekt
+        objectid          = objektid
+        username          = aenderer
+        time_of_change    = zeit
+        date_of_change    = datum
+        date_until        = dat_bis
+        time_until        = zeit_bis
+      TABLES
+        i_cdhdr           = icdhdr
+      EXCEPTIONS
+        no_position_found = 1
+        OTHERS            = 2.
+
+    CASE sy-subrc.
+      WHEN 0.
+        IF nummer NE space.
+          DELETE icdhdr WHERE changenr NE nummer.
+        ENDIF.
+        IF NOT icdhdr[] IS INITIAL.
+          PERFORM ausgabe_header.
+        ELSE.
+          WRITE: 'Keine Positionen gefunden'(101).
+        ENDIF.
+      WHEN 1.
+        WRITE: 'Keine Positionen gefunden'(101).
+      WHEN 2.
+        WRITE: 'Fehler beim Lesen'(102).
+    ENDCASE.
+  ENDIF.  "new_disp
+
+AT USER-COMMAND.
+  IF sy-ucomm = 'PRI' AND sy-lsind = '2'.
+    NEW-PAGE PRINT ON LINE-SIZE 132 LINE-COUNT 64.
+    PERFORM ausgabe_positionen.
+    NEW-PAGE PRINT OFF.
+  ENDIF.
+
+  IF sy-ucomm = 'F2' AND sy-lsind = '1'.
+    nummer = ls_cdhdr-changenr.
+
+    IF ls_cdhdr-changenr = space.
+      MESSAGE s886.
+      sy-lsind = 0.
+    ELSE.
+      REFRESH ausg.
+      CLEAR: ls_cdhdr-changenr, ls_cdhdr-objectid.
+      CALL FUNCTION 'CHANGEDOCUMENT_READ_POSITIONS'
+        EXPORTING
+          changenumber      = nummer
+          tablename         = tabname
+          tablekey          = tabkey
+        IMPORTING
+          header            = ls_cdhdr
+        TABLES
+          editpos           = ausg
+        EXCEPTIONS
+          no_position_found = 1
+          OTHERS            = 2.
+
+      CASE sy-subrc.
+        WHEN 0. PERFORM ausgabe_positionen.
+        WHEN 1. WRITE: 'Keine Positionen gefunden'(101).
+        WHEN 2. WRITE: 'Fehler beim Lesen'(102).
+      ENDCASE.
+    ENDIF.
+
+  ENDIF.
+
+TOP-OF-PAGE.
+  PERFORM ueberschrift_header.
+
+TOP-OF-PAGE DURING LINE-SELECTION.
+  CASE list.
+    WHEN '0'.
+      PERFORM ueberschrift_header.
+    WHEN '1'.
+      PERFORM ueberschrift_positionen.
+  ENDCASE.
+
+*&---------------------------------------------------------------------*
+*&      Form  build_so_doc_type_range
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+FORM build_so_doc_type_range.
+
+  CLEAR:
+    r_auart[],
+    tbl_xsoty[],
+    wr_auart.
+
+  SELECT *
+      INTO TABLE tbl_xsoty
+        FROM tvarvc
+          WHERE name = c_so_log_type
+          AND   type = c_s
+  ORDER BY low.
+
+  LOOP AT tbl_xsoty INTO wa_xsoty.
+    wr_auart-sign   = c_e.
+    wr_auart-option = c_eq.
+    wr_auart-low    = wa_xsoty-low.
+    APPEND wr_auart TO r_auart.
+  ENDLOOP.
+
+ENDFORM.                               " build_so_doc_type_range
+
+*---------------------------------------------------------------------*
+*       FORM UEBERSCHRIFT_HEADER                                      *
+*---------------------------------------------------------------------*
+*       ........                                                      *
+*---------------------------------------------------------------------*
+FORM ueberschrift_header.
+  SUMMARY.
+  WRITE: / 'Belegnr'(202), 12 'Datum'(203), 23 'Zeit'(204),
+                      32 'Änderer'(205), 46 'OBJEKT-ID'(206).
+  ULINE.
+ENDFORM.
+
+*---------------------------------------------------------------------*
+*       FORM UEBERSCHRIFT_POSITIONEN                                  *
+*---------------------------------------------------------------------*
+*       ........                                                      *
+*---------------------------------------------------------------------*
+FORM ueberschrift_positionen.
+  DETAIL.
+  WRITE: / ls_cdhdr-changenr,
+           ls_cdhdr-udate DD/MM/YYYY,
+           ls_cdhdr-utime USING EDIT MASK '__:__:__',
+           ls_cdhdr-username,
+           ls_cdhdr-tcode.
+  ULINE.
+  SKIP.
+ENDFORM.
+
+*---------------------------------------------------------------------*
+*       FORM AUSGABE_HEADER                                           *
+*---------------------------------------------------------------------*
+*       ........                                                      *
+*---------------------------------------------------------------------*
+FORM ausgabe_header.
+  DATA: lv_hdr TYPE i.
+  list = '0'.
+  LOOP AT icdhdr INTO ls_cdhdr.
+    CALL FUNCTION 'CHANGEDOCUMENT_READ_POSITIONS'
+      EXPORTING
+        changenumber      = ls_cdhdr-changenr
+        tablename         = tabname
+        tablekey          = tabkey
+      EXCEPTIONS
+        no_position_found = 1
+        OTHERS            = 2.
+    IF sy-subrc IS INITIAL.
+      DETAIL.
+      WRITE: /    ls_cdhdr-changenr,
+               12 ls_cdhdr-udate DD/MM/YYYY,
+               23(8) ls_cdhdr-utime USING EDIT MASK '__:__:__',
+               32 ls_cdhdr-username,
+               46 ls_cdhdr-objectid.
+      HIDE: ls_cdhdr-changenr, ls_cdhdr-objectid.
+    ELSE.
+      DELETE icdhdr.
+    ENDIF.
+  ENDLOOP.
+  DESCRIBE TABLE icdhdr LINES lv_hdr.
+  IF lv_hdr IS INITIAL.
+    WRITE: 'Keine Positionen gefunden'(101).
+  ENDIF.
+  CLEAR: ls_cdhdr-changenr, ls_cdhdr-objectid.
+ENDFORM.
+
+*---------------------------------------------------------------------*
+*       FORM AUSGABE_POSITIONEN                                       *
+*---------------------------------------------------------------------*
+*       ........                                                      *
+*---------------------------------------------------------------------*
+FORM ausgabe_positionen.
+  FIELD-SYMBOLS: <f_old>, <f_new>, <key> TYPE c.
+  DATA: helpkey     TYPE cdpos-tabkey,
+        indtext(40) TYPE c.
+
+  list = '1'.
+  SET PF-STATUS 'POSI'.
+  SET TITLEBAR '200' WITH objekt icdhdr-objectid.
+
+  SORT ausg BY tabname tabkey chngind fname.
+
+  LOOP AT ausg  ASSIGNING <f_ausg>.
+    ASSIGN <f_ausg>-tabkey TO <key> TYPE 'C'.
+    helpkey = <key>.
+    ASSIGN helpkey(<f_ausg>-keylen) TO <key>.
+
+    CASE <f_ausg>-chngind.
+      WHEN 'U'.
+        IF <f_ausg>-text_case NE space.
+          indtext = 'Textänderung'(501).
+        ELSE.
+          indtext = 'Änderung'(502).
+        ENDIF.
+      WHEN 'D'.
+        IF <f_ausg>-text_case NE space.
+          indtext = 'Textlöschung'(503).
+        ELSE.
+          indtext = 'Löschung'(504).
+        ENDIF.
+      WHEN 'E'.
+        indtext = 'Löschung'(505).
+      WHEN 'I'.
+        IF <f_ausg>-text_case NE space.
+          indtext = 'Texterfassung'(506).
+        ELSE.
+          indtext = 'Erfassung'(507).
+        ENDIF.
+      WHEN 'M'.
+        indtext = 'Feld nicht mehr in Tabelle definiert'(508).
+    ENDCASE.
+
+    IF <f_ausg>-text_case NE space.
+      RESERVE 4 LINES.
+      DETAIL.
+      buffer = <key>.
+      WRITE: / <f_ausg>-tabname, buffer.
+      SUMMARY.
+      WRITE: / <f_ausg>-textart, <f_ausg>-sprache, indtext.
+      SKIP.
+    ELSE.
+      CASE <f_ausg>-chngind.
+        WHEN 'U'.
+          ASSIGN <f_ausg>-f_old(<f_ausg>-outlen) TO <f_old>.
+          ASSIGN <f_ausg>-f_new(<f_ausg>-outlen) TO <f_new>.
+          RESERVE 5 LINES.
+          PERFORM ausgabe_pos_header USING <key> ' '.
+          WRITE: / <f_ausg>-fname, (8) indtext, (50) <f_ausg>-ftext.
+          WRITE: / 'alt:'(401), (125) <f_old> UNDER buffer.
+          WRITE: / 'neu:'(402), (125) <f_new> UNDER buffer.
+          SKIP.
+        WHEN 'E'.
+          ASSIGN <f_ausg>-f_old(<f_ausg>-outlen) TO <f_old>.
+          RESERVE 4 LINES.
+          PERFORM ausgabe_pos_header USING <key> ' '.
+          WRITE: / <f_ausg>-fname, (8) indtext, (50) <f_ausg>-ftext.
+          WRITE: / 'alt:'(401), (125) <f_old>  UNDER buffer.
+          SKIP.
+        WHEN 'M'.
+          RESERVE 4 LINES.
+          PERFORM ausgabe_pos_header USING <key> ' '.
+          WRITE: / <f_ausg>-fname, indtext.
+          WRITE: / 'Änderung nicht anzeigbar'(509).
+          SKIP.
+        WHEN OTHERS.
+          RESERVE 3 LINES.
+          PERFORM ausgabe_pos_header USING <key> indtext.
+          SKIP.
+      ENDCASE.
+    ENDIF.
+  ENDLOOP.
+  IF sy-subrc NE 0.
+    WRITE: / 'Keine Positionen gefunden'(101).
+  ENDIF.
+
+ENDFORM.
+
+*---------------------------------------------------------------------*
+*       FORM AUSGABE_POS_HEADER                                       *
+*---------------------------------------------------------------------*
+*       ........                                                      *
+*---------------------------------------------------------------------*
+*  -->  KEY                                                           *
+*  -->  TEXT                                                          *
+*---------------------------------------------------------------------*
+FORM ausgabe_pos_header USING key  TYPE c
+                              text TYPE c.
+  IF key_exp = space.
+    IF text = space.
+      DETAIL.
+      buffer = key.
+      WRITE : / <f_ausg>-tabname, buffer.
+      SUMMARY.
+    ELSE.
+      DETAIL.
+      WRITE: / <f_ausg>-tabname, key, text.
+    ENDIF.
+  ELSE.
+    READ TABLE all_keys WITH KEY tabname = <f_ausg>-tabname
+                        TRANSPORTING NO FIELDS.
+    IF sy-subrc <> 0.
+*       Schlüsselfelder besorgen
+      REFRESH idfies.
+      CALL FUNCTION 'GET_FIELDTAB'
+        EXPORTING
+          tabname             = <f_ausg>-tabname
+          withtext            = 'X'
+        TABLES
+          fieldtab            = idfies
+        EXCEPTIONS
+          internal_error      = 01
+          no_texts_found      = 01
+          table_has_no_fields = 01
+          table_not_activ     = 01.
+      IF sy-subrc = 0.
+        count2 = 1.
+        LOOP AT idfies WHERE keyflag  =  'X'
+                         AND datatype <> 'CLNT'.
+          CLEAR all_keys.
+          all_keys = idfies.
+          IF all_keys-intlen < 10.
+            count1 = 10.
+          ELSE.
+            count1 = all_keys-intlen.
+          ENDIF.
+
+          IF all_keys-scrlen3 <= count1.
+            all_keys-text   = '3'.
+            all_keys-length = count1.
+          ELSEIF all_keys-scrlen2 <= count1.
+            all_keys-text   = '2'.
+            all_keys-length = count1.
+          ELSEIF all_keys-scrlen1 <= count1.
+            all_keys-text   = '1'.
+            all_keys-length = count1.
+          ELSE.
+            all_keys-text   = '1'.
+            all_keys-length = all_keys-scrlen1.
+          ENDIF.
+          all_keys-placement = count2.
+          count2 = count2 + all_keys-length + 1.
+          APPEND all_keys.
+        ENDLOOP.
+        IF sy-subrc <> 0.
+          SORT all_keys BY tabname position.
+        ENDIF.
+      ENDIF.
+    ENDIF.
+
+    DETAIL.
+    IF text = space.
+      WRITE: / <f_ausg>-tabname.
+    ELSE.
+      WRITE: / <f_ausg>-tabname, text.
+      WRITE: / ' '.
+    ENDIF.
+    count1 = 11.
+    LOOP AT all_keys WHERE tabname = <f_ausg>-tabname.
+      count1 = count1 + all_keys-placement.
+      POSITION count1.
+      CASE all_keys-text.
+        WHEN '1'.
+          IF all_keys-length > 10.
+            count2 = 10.
+          ELSE.
+            count2 = all_keys-length.
+          ENDIF.
+          ASSIGN all_keys-scrtext_s(count2) TO <f>.
+        WHEN '2'.
+          IF all_keys-length > 20.
+            count2 = 20.
+          ELSE.
+            count2 = all_keys-length.
+          ENDIF.
+          ASSIGN all_keys-scrtext_m(count2) TO <f>.
+        WHEN '3'.
+          IF all_keys-length > 40.
+            count2 = 40.
+          ELSE.
+            count2 = all_keys-length.
+          ENDIF.
+          ASSIGN all_keys-scrtext_l(count2) TO <f>.
+      ENDCASE.
+      IF NOT <f> IS INITIAL.
+        WRITE <f>(count2).
+      ELSE.
+        WRITE all_keys-fieldname.
+      ENDIF.
+    ENDLOOP.
+    WRITE: / ' '.
+    count1 = 11.
+    LOOP AT all_keys WHERE tabname = <f_ausg>-tabname.
+      ASSIGN key+all_keys-offset(all_keys-intlen) TO <f>.
+      count1 = count1 + all_keys-placement.
+      POSITION count1.
+      WRITE: <f>.
+    ENDLOOP.
+    SUMMARY.
+  ENDIF.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  sales_selection_filter
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM sales_selection_filter TABLES rint_sales_info LIKE int_sales_info.
+
+* DM1K954986 - Begin
+* Build itab of values objectid+10 values for ABAP code rules
+* to be able to use 'for all entries' without error.
+* This creates an itab of vbeln values
+  DATA: vbeln_old TYPE vbak-vbeln,
+        w_bukrs   TYPE vbak-bukrs_vf.
+
+  REFRESH i_obj.
+  CLEAR   i_obj.
+  LOOP AT editpos_with_header.
+    i_obj-vbeln = editpos_with_header-objectid+0(10).
+    APPEND i_obj.
+  ENDLOOP.
+
+  SORT i_obj.
+  DELETE ADJACENT DUPLICATES FROM i_obj.
+* DM1K954986 - End
+
+* Nitin Khanna Insert Begin
+  SELECT vbak~vkorg vbak~vbeln vbap~posnr vbap~ps_psp_pnr  " DM1K954986
+         vbak~bstnk vbak~ihrez vbak~zz_cust_orderno INTO
+  TABLE rint_sales_info
+  FROM vbak INNER JOIN vbap
+  ON vbak~vbeln = vbap~vbeln
+  FOR ALL ENTRIES IN i_obj                                 " DM1K954986
+  WHERE vbak~vbeln = i_obj-vbeln AND                       " DM1K954986
+        vbak~vbeln IN svbeln AND
+        vbak~vkorg IN vkorg AND
+        vbak~vkorg IN r_vkorg AND
+        vbak~bstnk IN bstnk AND
+        vbak~zz_cust_orderno IN zz_cust AND
+        vbak~ihrez IN ihrez AND
+        vbap~ps_psp_pnr IN wbs_elem.
+
+* DM1K954986 - Begin
+* Exit when no SO meets the criteria
+  CHECK sy-subrc = 0.
+* DM1K954986 - End
+
+* Delete those line items from editpos_with_header that are not present
+* in int_sales_info.
+  LOOP AT editpos_with_header.
+
+    CLEAR itab.                                            " DM1K954986
+    PERFORM split_tablekey CHANGING itab-vbeln itab-posnr. " DM1K954986
+
+    IF itab-posnr = '' OR itab-posnr = '000000'.           " DM1K954986
+      READ TABLE rint_sales_info WITH KEY vbeln =
+             editpos_with_header-objectid+0(10).
+*   DM1K954986 - Begin
+    ELSE.
+      READ TABLE rint_sales_info WITH KEY
+             vbeln = editpos_with_header-objectid+0(10)
+             posnr = itab-posnr.
+*     Line item was deleted, or line item not included
+*     from the selection criteria
+      IF sy-subrc <> 0.
+        SELECT posnr INTO w_posnr
+          FROM vbap
+         WHERE
+           vbeln = editpos_with_header-objectid+0(10) AND
+           posnr = itab-posnr.
+        ENDSELECT.
+        IF sy-subrc = 0.
+*         Not included in the selection critera, ignore
+          sy-subrc = 4.
+        ELSE.
+          itab-posnr = '000000'        .
+          READ TABLE rint_sales_info WITH KEY vbeln =
+            editpos_with_header-objectid+0(10).
+        ENDIF.
+      ENDIF.
+    ENDIF.
+
+*   Clear line number so it will show blank on report screen
+    IF itab-posnr = '000000'.
+      CLEAR itab-posnr.
+    ENDIF.
+*   DM1K954986 - End
+
+*   Delete those line items from editpos_with_header that are not
+*   present in rint_sales_info
+    IF sy-subrc <> 0.
+      DELETE editpos_with_header.
+    ELSE.
+*     DM1K954986 - Begin
+      IF editpos_with_header-objectid+0(10) <> vbeln_old.
+        vbeln_old = editpos_with_header-objectid+0(10).
+*       Load company code value as tied to VKORG sales org
+        w_vkorg = rint_sales_info-vkorg.
+        PERFORM get_bukrs CHANGING w_bukrs.
+      ENDIF.
+*     DM1K954986 - End
+
+      MOVE-CORRESPONDING editpos_with_header TO itab.
+      itab-vkorg    = rint_sales_info-vkorg.
+      IF itab-posnr <> ''.   " DM1K954986
+        itab-wbs_elem = rint_sales_info-pspnr.
+      ENDIF.                 " DM1K954986
+      itab-bstnk    = rint_sales_info-bstnk.
+      itab-ihrez    = rint_sales_info-ihrez.
+      itab-zz_cust  = rint_sales_info-zz_cust_orderno.
+      itab-bukrs    = w_bukrs." DM1K954986
+      APPEND itab.
+    ENDIF.
+  ENDLOOP.
+
+ENDFORM.                    " sales_selection_filter
+
+*&---------------------------------------------------------------------*
+*&      Form  get_bukrs  DM1K954986
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      <--COMPANY /BUKRS
+*----------------------------------------------------------------------*
+FORM get_bukrs CHANGING company.
+
+  IF NOT pbukrs IS INITIAL.
+    company = pbukrs.
+  ELSE.
+    LOOP AT tbl_vkorg WHERE vkorg = w_vkorg.
+      company = tbl_vkorg-bukrs.
+    ENDLOOP.
+  ENDIF.
+
+ENDFORM.                    " get_bukrs
+
+*}
+*{ALV Forms
+*$*$  ALV Forms
+*&---------------------------------------------------------------------*
+*&      Form  LIST_OUTPUT
+*&---------------------------------------------------------------------*
+FORM list_output.
+
+* perform colors.
+
+*$*$  FIELDCATALOG
+* Create a generic structure used for attributes of the output list
+  PERFORM fieldcatalog.
+
+*$*$  LAYOUT and FCODE
+*  LAYOUT-COLTAB_FIELDNAME  = 'FARBE'.       "Colors
+  layout-colwidth_optimize = 'X'.
+  layout-group_change_edit = 'X'.
+  layout-detail_popup      = 'X'.
+  layout-zebra             = 'X'.
+  layout-f2code            = '&ETA'.        "Pick, Double-Click
+*  LAYOUT-BOX_FIELDNAME     = 'BOX'.
+*  LAYOUT-BOX_TABNAME       = 'ITAB'.
+*$*$  PRINT
+  print-no_print_listinfos = 'X'.
+*$*$  REUSE_ALV_HIERSEQ_LIST_DISPLAY
+  CALL FUNCTION 'REUSE_ALV_LIST_DISPLAY'
+    EXPORTING
+      i_callback_program       = repid
+      i_callback_pf_status_set = 'STATUS'
+      i_callback_user_command  = 'USER_COMMAND'
+      is_layout                = layout
+      it_fieldcat              = fieldcat[]
+      i_default                = 'X'
+      i_save                   = 'A'
+      is_variant               = variante
+    TABLES
+      t_outtab                 = itab.
+
+ENDFORM.                    " LIST_OUTPUT
+*&---------------------------------------------------------------------*
+*&      Form  FIELDCATALOG
+*&---------------------------------------------------------------------*
+FORM fieldcatalog.
+
+  REFRESH: fieldcat.
+* Create Generic FIELDCAT based on internal table definition
+  CALL FUNCTION 'REUSE_ALV_FIELDCATALOG_MERGE'
+    EXPORTING
+      i_program_name         = repid
+      i_internal_tabname     = 'ITAB'
+      i_inclname             = repid
+      i_client_never_display = 'X'
+    CHANGING
+      ct_fieldcat            = fieldcat[]
+    EXCEPTIONS
+      inconsistent_interface = 1
+      program_error          = 2
+      OTHERS                 = 3.
+
+* Modify specific fields for the display
+* Make modification to the generic strcuture: Field by field
+  LOOP AT fieldcat.
+
+    CASE fieldcat-fieldname.
+*     Kopffelder: Header
+      WHEN 'USEIT'.
+        fieldcat-no_out        = 'X'.
+        MODIFY fieldcat.
+      WHEN 'VKORG'.
+        fieldcat-seltext_l       = text-h01.
+        fieldcat-seltext_m       = text-h01.
+        fieldcat-seltext_s       = text-h01.
+        fieldcat-ddictxt         = 'M'.
+        fieldcat-key             = 'X'.
+        fieldcat-do_sum          = 'X'.
+        fieldcat-fix_column      = 'X'.
+        fieldcat-col_pos         = 1.
+        MODIFY fieldcat.
+      WHEN 'BUKRS'.                           " DM1K954986
+        fieldcat-seltext_l       = text-h02.
+        fieldcat-seltext_m       = text-h02.
+        fieldcat-seltext_s       = text-h02.
+        fieldcat-do_sum          = 'X'.
+        fieldcat-key             = 'X'.
+        fieldcat-fix_column      = 'X'.
+        fieldcat-col_pos         = 2.
+        MODIFY fieldcat.
+      WHEN 'WBS_ELEM'.
+        fieldcat-seltext_l       = text-h03.
+        fieldcat-seltext_m       = text-h03.
+        fieldcat-seltext_s       = text-h03.
+        fieldcat-do_sum          = 'X'.
+        fieldcat-key             = 'X'.
+        fieldcat-fix_column      = 'X'.
+        fieldcat-col_pos         = 3.
+        MODIFY fieldcat.
+      WHEN 'BSTNK'.
+        fieldcat-seltext_l       = text-h04.
+        fieldcat-seltext_m       = text-h04.
+        fieldcat-seltext_s       = text-h04.
+        fieldcat-do_sum          = 'X'.
+        fieldcat-key             = 'X'.
+        fieldcat-fix_column      = 'X'.
+        fieldcat-col_pos         = 4.
+        MODIFY fieldcat.
+      WHEN 'IHREZ'.
+        fieldcat-seltext_l       = text-h05.
+        fieldcat-seltext_m       = text-h05.
+        fieldcat-seltext_s       = text-h05.
+        fieldcat-do_sum          = 'X'.
+        fieldcat-key             = 'X'.
+        fieldcat-fix_column      = 'X'.
+        fieldcat-col_pos         = 5.
+        MODIFY fieldcat.
+      WHEN 'ZZ_CUST'.
+        fieldcat-seltext_l       = text-h06.
+        fieldcat-seltext_m       = text-h06.
+        fieldcat-seltext_s       = text-h06.
+        fieldcat-do_sum          = 'X'.
+        fieldcat-key             = 'X'.
+        fieldcat-fix_column      = 'X'.
+        fieldcat-col_pos         = 6.
+        MODIFY fieldcat.
+      WHEN 'VBELN'.
+        fieldcat-seltext_l       = text-h07.
+        fieldcat-seltext_m       = text-h07.
+        fieldcat-seltext_s       = text-h07.
+        fieldcat-do_sum          = 'X'.
+        CLEAR fieldcat-key.
+        fieldcat-col_pos         = 7.
+        MODIFY fieldcat.
+      WHEN 'POSNR'.
+        fieldcat-seltext_l       = text-h08.
+        fieldcat-seltext_m       = text-h08.
+        fieldcat-seltext_s       = text-h08.
+        CLEAR fieldcat-key.
+        fieldcat-col_pos         = 8.
+        MODIFY fieldcat.
+      WHEN 'OBJECTID'.
+        fieldcat-seltext_l       = text-h09.
+        fieldcat-seltext_m       = text-h09.
+        fieldcat-seltext_s       = text-h09.
+        CLEAR fieldcat-key.
+        fieldcat-col_pos         = 9.
+        MODIFY fieldcat.
+      WHEN 'CHANGENR'.
+        fieldcat-seltext_l       = text-h10.
+        fieldcat-seltext_m       = text-h10.
+        fieldcat-seltext_s       = text-h10.
+        CLEAR fieldcat-key.
+        fieldcat-col_pos         = 10.
+        MODIFY fieldcat.
+      WHEN 'USERNAME'.
+        fieldcat-seltext_l       = text-h11.
+        fieldcat-seltext_m       = text-h11.
+        fieldcat-seltext_s       = text-h11.
+        CLEAR fieldcat-key.
+        fieldcat-col_pos         = 11.
+        MODIFY fieldcat.
+      WHEN 'UDATE'.
+        fieldcat-seltext_l       = text-h12.
+        fieldcat-seltext_m       = text-h12.
+        fieldcat-seltext_s       = text-h12.
+        CLEAR fieldcat-key.
+        fieldcat-col_pos         = 12.
+        MODIFY fieldcat.
+      WHEN 'UTIME'.
+        fieldcat-seltext_l       = text-h13.
+        fieldcat-seltext_m       = text-h13.
+        fieldcat-seltext_s       = text-h13.
+        CLEAR fieldcat-key.
+        fieldcat-col_pos         = 13.
+        MODIFY fieldcat.
+      WHEN 'TCODE'.
+        fieldcat-seltext_l       = text-h14.
+        fieldcat-seltext_m       = text-h14.
+        fieldcat-seltext_s       = text-h14.
+        CLEAR fieldcat-key.
+        fieldcat-col_pos         = 14.
+        MODIFY fieldcat.
+      WHEN 'TABNAME'.
+        fieldcat-seltext_l       = text-h15.
+        fieldcat-seltext_m       = text-h15.
+        fieldcat-seltext_s       = text-h15.
+        CLEAR fieldcat-key.
+        fieldcat-col_pos         = 15.
+        MODIFY fieldcat.
+      WHEN 'TABKEY'.
+        fieldcat-seltext_l       = text-h16.
+        fieldcat-seltext_m       = text-h16.
+        fieldcat-seltext_s       = text-h16.
+        CLEAR fieldcat-key.
+        fieldcat-col_pos         = 16.
+        MODIFY fieldcat.
+      WHEN 'EXT_KEYLEN'.                                    "DM1K956555
+        fieldcat-seltext_l       = text-h17.
+        fieldcat-seltext_m       = text-h17.
+        fieldcat-seltext_s       = text-h17.
+        CLEAR fieldcat-key.
+        fieldcat-col_pos         = 17.
+        MODIFY fieldcat.
+      WHEN 'CHNGIND'.
+        fieldcat-seltext_l       = text-h18.
+        fieldcat-seltext_m       = text-h18.
+        fieldcat-seltext_s       = text-h18.
+        CLEAR fieldcat-key.
+        fieldcat-col_pos         = 18.
+        MODIFY fieldcat.
+      WHEN 'FNAME'.
+        fieldcat-seltext_l       = text-h19.
+        fieldcat-seltext_m       = text-h19.
+        fieldcat-seltext_s       = text-h19.
+        CLEAR fieldcat-key.
+        fieldcat-col_pos         = 19.
+        MODIFY fieldcat.
+      WHEN 'FTEXT'.
+        fieldcat-seltext_l       = text-h20.
+        fieldcat-seltext_m       = text-h20.
+        fieldcat-seltext_s       = text-h20.
+        CLEAR fieldcat-key.
+        fieldcat-col_pos         = 20.
+        MODIFY fieldcat.
+      WHEN 'TEXTART'.
+        fieldcat-seltext_l       = text-h21.
+        fieldcat-seltext_m       = text-h21.
+        fieldcat-seltext_s       = text-h21.
+        CLEAR fieldcat-key.
+        fieldcat-col_pos         = 21.
+        MODIFY fieldcat.
+      WHEN 'SPRACHE'.
+        fieldcat-seltext_l       = text-h22.
+        fieldcat-seltext_m       = text-h22.
+        fieldcat-seltext_s       = text-h22.
+        CLEAR fieldcat-key.
+        fieldcat-col_pos         = 22.
+        MODIFY fieldcat.
+      WHEN 'TEXT_CASE'.
+        fieldcat-seltext_l       = text-h23.
+        fieldcat-seltext_m       = text-h23.
+        fieldcat-seltext_s       = text-h23.
+        CLEAR fieldcat-key.
+        fieldcat-col_pos         = 23.
+        MODIFY fieldcat.
+      WHEN 'OUTLEN'.
+        fieldcat-seltext_l       = text-h24.
+        fieldcat-seltext_m       = text-h24.
+        fieldcat-seltext_s       = text-h24.
+        CLEAR fieldcat-key.
+        fieldcat-col_pos         = 24.
+        MODIFY fieldcat.
+      WHEN 'F_OLD'.
+        fieldcat-seltext_l       = text-h25.
+        fieldcat-seltext_m       = text-h25.
+        fieldcat-seltext_s       = text-h25.
+        CLEAR fieldcat-key.
+        fieldcat-col_pos         = 25.
+        MODIFY fieldcat.
+      WHEN 'F_NEW'.
+        fieldcat-seltext_l       = text-h26.
+        fieldcat-seltext_m       = text-h26.
+        fieldcat-seltext_s       = text-h26.
+        CLEAR fieldcat-key.
+        fieldcat-col_pos         = 26.
+        MODIFY fieldcat.
+*     DM1K956555 - Begin
+      WHEN 'KEYLEN'.
+        fieldcat-seltext_l       = text-h27.
+        fieldcat-seltext_m       = text-h27.
+        fieldcat-seltext_s       = text-h27.
+        fieldcat-no_out          = 'X'.
+        CLEAR fieldcat-key.
+        MODIFY fieldcat.
+      WHEN 'VERSION'.
+        fieldcat-seltext_l       = text-h28.
+        fieldcat-seltext_m       = text-h28.
+        fieldcat-seltext_s       = text-h28.
+        CLEAR fieldcat-key.
+        MODIFY fieldcat.
+*     DM1K956555 - End
+    ENDCASE.
+  ENDLOOP.
+
+ENDFORM.                    " FIELDCATALOG
+*&---------------------------------------------------------------------*
+*&      Form  PF_STATUS_SET
+*&---------------------------------------------------------------------*
+FORM status USING extab TYPE slis_t_extab.
+
+  SET PF-STATUS 'STANDARD'.
+
+ENDFORM.                   " PF_STAUS_SET
+*&---------------------------------------------------------------------*
+*&      Form  split_tablekey
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*      <--PVBELN  text
+*      <--PPOSNR  text
+*----------------------------------------------------------------------*
+FORM split_tablekey CHANGING pvbeln
+                             pposnr.
+  CLEAR lmandt(3).                              " DM1K954986
+
+  pvbeln = editpos_with_header-objectid.        " DM1K954986
+  CASE editpos_with_header-tabname.             " DM1K954986
+    WHEN 'VBAK'.
+      CLEAR: pposnr.
+    WHEN 'VBAP' OR 'VBKD'.                      " DM1K954986
+      lmandt = editpos_with_header-tabkey+0(3). " DM1K954986
+      pposnr = editpos_with_header-tabkey+13(6)." DM1K954986
+*   DM1K954986 - Begin
+    WHEN 'VBEP' OR 'VEDA' OR 'VBPA'.
+      pposnr = editpos_with_header-tabkey+13(6)." DM1K954986
+*   DM1K954986 - End
+    WHEN 'KONVC'.
+      pposnr = editpos_with_header-tabkey+0(6). " DM1K954986
+    WHEN 'FPLT' OR 'FPLA'.                      " DM1K954986
+*   DM1K954986 - Begin
+      CLEAR pposnr.
+      SELECT posnr INTO pposnr
+        FROM vbkd
+       WHERE
+         vbeln = editpos_with_header-objectid AND
+         fplnr = editpos_with_header-tabkey+3(10).
+      ENDSELECT.
+    WHEN OTHERS.
+*   DM1K954986 - End
+      CLEAR: pposnr.
+  ENDCASE.
+
+ENDFORM.                    " split_tablekey
+
+*&---------------------------------------------------------------------*
+*&      Form  read_changedocs    " DM1K954986
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM read_changedocs.
+
+  CALL FUNCTION 'CHANGEDOCUMENT_READ'
+    EXPORTING
+      changenumber      = nummer
+      date_of_change    = datum
+      objectclass       = objekt
+      objectid          = objektid
+      tablekey          = tabkey
+      tablename         = tabname
+      time_of_change    = zeit
+      username          = aenderer
+      date_until        = dat_bis
+      time_until        = zeit_bis
+    TABLES
+      editpos           = editpos_with_header
+    EXCEPTIONS
+      no_position_found = 1
+      OTHERS            = 2.
+
+  CASE sy-subrc.
+    WHEN 0.
+
+    WHEN 1.
+*     WRITE: / 'No items found'(101), nummer, objektid, objekt.
+    WHEN 2.
+      WRITE: 'Fehler beim Lesen'(102).
+  ENDCASE.
+
+ENDFORM.                    " read_changedocs
