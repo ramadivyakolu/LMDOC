@@ -1,0 +1,78 @@
+Open in ABAP Development Tools
+Data Definition ZI_PM_EQUP_CHANGE_LOG [DS4, 100]
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+35
+36
+37
+38
+@AbapCatalog.viewEnhancementCategory: [#NONE]
+@AccessControl.authorizationCheck: #NOT_REQUIRED
+@EndUserText.label: 'Equipment Change Log'
+@Metadata.ignorePropagatedAnnotations: true
+@ObjectModel.usageType:{
+    serviceQuality: #X,
+    sizeCategory: #S,
+    dataClass: #MIXED
+}
+define view entity ZI_PM_EQUP_CHANGE_LOG as select from cdhdr
+    inner join   cdpos on  cdhdr.objectclas = cdpos.objectclas
+                       and cdhdr.changenr   = cdpos.changenr
+{
+ 
+  key  cdhdr.objectid   as Objectid,
+       cdhdr.changenr,
+       cdhdr.tcode,
+       cdpos.tabname,
+       cdpos.tabkey     as Tabkey,
+       cdpos.fname      as Fname,
+       cdpos.chngind    as Chngind,
+       cdpos.text_case  as TextCase,
+       cdpos.unit_old   as UnitOld,
+       cdpos.unit_new   as UnitNew,
+       cdpos.cuky_old   as CukyOld,
+       cdpos.cuky_new   as CukyNew,
+       cdpos.value_new  as ValueNew,
+       cdpos.value_old  as ValueOld,
+       cdpos._dataaging as Dataaging
+ 
+}
+where
+  (
+       cdhdr.objectclas = 'EQUI'
+    or cdhdr.objectclas = 'EQUZ'
+    or cdhdr.objectclas = '/CGDC/EQUI_ADD'
+  )
+  and  cdhdr.change_ind = 'U'
