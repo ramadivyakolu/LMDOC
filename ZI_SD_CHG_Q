@@ -1,0 +1,225 @@
+@AbapCatalog.sqlViewName: 'ZISLSCONTRHISQ'
+@EndUserText.label: 'Sales Contract History'
+@VDM.viewType:  #CONSUMPTION
+@ClientHandling.algorithm: #SESSION_VARIABLE
+@AccessControl.authorizationCheck: #NOT_REQUIRED
+@OData.publish: true
+
+define view ZI_SALESCONTRACT_HISTORY_Q
+  as select from ZI_SALESCONTRACT_HISTORY_CUBE as _Contract
+
+{
+
+  key      Objectclas,
+  key      Objectid,
+           @UI.lineItem.position:30
+           @EndUserText.label: 'Document Number'
+  key      Changenr,
+           @UI.lineItem.position:60
+           @EndUserText.label: 'Table Key'
+  key      Tabkey,
+//           @UI.selectionField:[{position:23}]
+           @Consumption.valueHelpDefinition: [
+           { entity:  { name:    'ZI_SDHISTTABLEVH',
+                element: 'HistTable' }
+           }]
+           @Consumption.filter: {selectionType: #SINGLE, multipleSelections: true, mandatory: false}
+
+           @UI.lineItem.position:55
+           @EndUserText.label: 'Table'
+  key      Tabname,
+
+ //          @UI.selectionField:[{position:24}]
+           @Consumption.valueHelpDefinition: [
+          { entity:  { name:    'ZI_SDHISTFIELDVH',
+              element: 'HistField' }
+          }]
+           @Consumption.filter: {selectionType: #SINGLE, multipleSelections: true, mandatory: false}
+
+           @UI.lineItem.position:75
+           @EndUserText.label: 'Field Name'
+  key      Fname,
+           @UI.lineItem.position:70
+           @EndUserText.label: 'Change Type'
+  key      ChangeInd,
+
+           @UI.selectionField:[{position:5}]
+           @UI.lineItem.position:5
+            @Consumption.valueHelpDefinition: [
+           { entity:  { name:    'ZI_SD_COGIT_CONNO_VH',
+              element: 'CurContNo' }
+          }]
+           
+           @Consumption.filter: {selectionType: #INTERVAL, multipleSelections: true, mandatory: false}
+           @EndUserText.label: 'Customer Contract Number'
+           ContractDelvNo,
+
+           @UI.selectionField:[{position:1}]
+           @UI.lineItem.position:1
+           @Consumption.valueHelpDefinition: [
+           { entity:  { name:    'I_SalesOrganizationValueHelp',
+                element: 'SalesOrganization' }
+           }]
+           @Consumption.filter: {selectionType: #INTERVAL, multipleSelections: true, mandatory: true}
+           @EndUserText.label: 'Sales Organization'
+           @ObjectModel.foreignKey.association: '_SalesOrganization'
+           SalesOrganization,
+
+           @UI.selectionField:[{position:2}]
+           @UI.lineItem.position:2
+           @Consumption.valueHelpDefinition: [
+           { entity:  { name:    'I_CompanyCodeVH',
+               element: 'CompanyCode' }
+           }]
+           @Consumption.filter: {selectionType: #INTERVAL, multipleSelections: true, mandatory: true}
+           @EndUserText.label: 'Company Code'
+           @ObjectModel.foreignKey.association: '_CompanyCode'
+           CompanyCode,
+
+           @UI.selectionField:[{position:3}]
+           @UI.lineItem.position:3
+           @Consumption.valueHelpDefinition: [
+          { entity:  { name:    'I_WBSElement',
+              element: 'WBSElement' }
+          }]
+           @Consumption.filter: {selectionType: #INTERVAL, multipleSelections: true, mandatory: false}
+           @EndUserText.label: 'WBS Element'
+           @ObjectModel.foreignKey.association: '_WBSElement'
+            @UI.lineItem: [{cssDefault.width: '10rem'}]
+           _WBSElementBasicData_2.WBSElement,
+           _WBSElementBasicData_2.WBSDescription,
+
+          // @UI.selectionField:[{position:4}]
+           @UI.lineItem.position:4
+           @Consumption.valueHelpDefinition: [
+          { entity:  { name:    'ZI_SDCUSTPURCHORDVH',
+              element: 'CustPurchOrd' }
+          }]           
+           @Consumption.filter: {selectionType: #INTERVAL, multipleSelections: true, mandatory: false}
+           @EndUserText.label: 'Purchase Order'
+           PurchaseOrder,
+
+           @UI.selectionField:[{position:6}]
+           @UI.lineItem.position:6
+           @Consumption.filter: {selectionType: #INTERVAL, multipleSelections: true, mandatory: false}
+           @EndUserText.label: 'Customer Delivery Order Number'
+           ContractNo,
+
+         //  @UI.selectionField:[{position:5}]
+        //   @UI.lineItem.position:5
+           @Consumption.filter: {selectionType: #INTERVAL, multipleSelections: true, mandatory: false}
+           @EndUserText.label: 'Customer Contract Number'
+           @UI.lineItem: [{cssDefault.width: '10rem'}]
+           IcertisContractNumber,
+
+           @UI.selectionField:[{position:7}]
+           @UI.lineItem.position:7
+           @Consumption.filter: {selectionType: #INTERVAL, multipleSelections: true, mandatory: false}
+           @EndUserText.label: 'Operational Contract Number'
+           @ObjectModel.foreignKey.association: '_SalesDocument'
+           SalesDocument,
+
+           @UI.lineItem.position:10
+           @EndUserText.label: 'Contract Line Number'
+           POSNR_ACT,
+
+           @Consumption.valueHelpDefinition: [
+           { entity:  { name:    'I_ProfitCenterVH',
+               element: 'ProfitCenter' }
+           }]
+           @Consumption.filter: {selectionType: #SINGLE, multipleSelections: true, mandatory: false}
+           @UI.selectionField:[{position:8}]
+     //      @UI.lineItem.position:8
+           @EndUserText.label: 'Profit Center Number'
+           @ObjectModel.foreignKey.association: '_ProfitCenter'
+           ProfitCenter,
+
+
+           @UI.lineItem.position:25
+           @EndUserText.label: 'CLIN/SLIN/ELIN'
+           Cline,
+
+
+
+
+           @UI.selectionField:[{position:12}]
+           @UI.lineItem.position:35
+           @EndUserText.label: 'Last Changed By'
+           //     @ObjectModel.text.element: ['UserDescription']
+           //      @UI.textArrangement: #TEXT_ONLY
+           @ObjectModel.foreignKey.association: '_CreatedByUser'
+           @Consumption.valueHelpDefinition: [
+           { entity:  { name:    'ZI_SDCONTUSERVH',
+                element: 'UserID' }
+           }]
+           @Consumption.filter: {selectionType: #SINGLE, multipleSelections: true, mandatory: false}
+           @Semantics.user.id: true
+           CreatedByUser,
+           UserDescription,
+
+
+
+           @Consumption.filter: {selectionType:#RANGE, multipleSelections: true, mandatory: true}
+           @UI.selectionField:[{position:11}]
+           @UI.lineItem.position:40
+           @EndUserText.label: 'Last Changed On Date Range'
+           @ObjectModel.foreignKey.association: '_CalendarDate'
+           @Semantics.businessDate.at: true
+           ModifiedDate,
+           
+            @UI.lineItem.position:61
+            @EndUserText.label: 'Key Length'
+            KeyLength,
+
+           @UI.lineItem.position:45
+           @EndUserText.label: 'Time'
+           Utime,
+
+  //         @UI.selectionField:[{position:25}]
+           @UI.lineItem.position:50
+           @EndUserText.label: 'Tcode'
+           Tcode,
+
+           @UI.lineItem.position:76
+           @EndUserText.label: 'Field Description'
+           txtsh,
+
+           @UI.lineItem.position:80
+           @EndUserText.label: 'Language'
+           Langu,
+
+           @UI.lineItem.position:85
+           @EndUserText.label: 'Text Flag'
+           TextFlag,
+
+           @UI.lineItem.position:90
+           @EndUserText.label: 'Output Length'
+           OutputLength,
+
+           @UI.lineItem.position:95
+           @EndUserText.label: 'Old Value'
+           ValueOld,
+
+           @UI.lineItem.position:98
+           @EndUserText.label: 'New Value'
+           ValueNew,
+
+
+
+           @Consumption.valueHelpDefinition: [
+           { entity:  { name:    'ZI_SDHISTLINETYPVH',
+            element: 'Header_Line_Ind' }
+           }]
+           @UI.lineItem.position:100
+           @EndUserText.label: 'Header/Line Indicator'
+           @Consumption.filter: {selectionType: #SINGLE, multipleSelections: true, mandatory: false}
+           @UI.selectionField:[{position:28}]
+           Header_Line_Ind
+
+//           Chngind,
+//           UnitOld,
+//           UnitNew,
+//           CukyOld,
+//           CukyNew
+
+}
