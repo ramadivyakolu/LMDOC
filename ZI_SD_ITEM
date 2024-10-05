@@ -1,0 +1,748 @@
+@EndUserText.label: 'Sales Order Item - Query'
+@VDM.viewType: #CONSUMPTION
+
+//@AccessControl.authorizationCheck: #PRIVILEGED_ONLY
+@AbapCatalog: {
+   sqlViewName: 'ZSDSLSORDERITEMQ',
+   compiler.compareFilter: true
+}
+@ObjectModel: {
+   usageType: {
+     dataClass:      #MIXED,
+     serviceQuality: #D,
+     sizeCategory:   #XL
+   }
+}
+@ClientHandling.algorithm: #SESSION_VARIABLE
+@OData.publish: true
+
+define view ZI_SALESORDERITEMQRY
+
+  as select distinct from ZI_SALESDOCUMENTITEM
+{
+  //Key
+  @ObjectModel.foreignKey.association: '_SalesDocument'
+  @UI.selectionField:[{position:4}]
+  @UI.lineItem.position:1
+  @Consumption.filter: {selectionType: #INTERVAL, multipleSelections: true, mandatory: false}
+  @EndUserText.label: 'Sales Order'
+  SalesDocument,
+
+  @AnalyticsDetails.query.display: #KEY_TEXT
+  //        @UI.selectionField:[{position:2}]
+  @Consumption.valueHelpDefinition: [
+   { entity:  { name:    'I_SalesOrganizationValueHelp',
+                element: 'SalesOrganization' }
+   }]
+  @Consumption.filter: {selectionType: #INTERVAL, multipleSelections: true}
+  @ObjectModel.foreignKey.association: '_SalesOrganization'
+  
+  @EndUserText.label: 'Sales Org'
+  SalesOrganization,
+
+  @EndUserText.label: 'Sales Org Desc'
+ @UI.lineItem.position:3
+  _SalesOrganization._Text[1: Language = $session.system_language].SalesOrganizationName,
+
+
+  @Consumption.filter: {selectionType: #INTERVAL, multipleSelections: true}
+  @AnalyticsDetails.query.display: #KEY_TEXT
+  @Consumption.valueHelpDefinition: [
+   { entity:  { name:    'C_SalesOfficeValueHelp',
+                element: 'SalesOffice' }
+   }]
+  @UI.selectionField:[{position:1}]
+  
+  @EndUserText.label: 'Sales Office'
+  SalesOffice,
+  
+  @EndUserText.label: 'Sales Office Desc'
+  @UI.lineItem.position:2
+  _SalesOffice._Text[1: Language = $session.system_language].SalesOfficeName,
+
+  @UI.lineItem.position:4
+  @EndUserText.label: 'Purchase Order'
+  PurchaseOrderByCustomer,
+
+
+  @UI.lineItem.position:5
+  @EndUserText.label: 'Work Order'
+  WorkOrder,
+
+  @UI.lineItem.position:6
+  @ObjectModel.foreignKey.association: '_WBSElementBasicData'
+  @EndUserText.label: 'WBS Element'
+  WBSElement,
+  WBSElementInternalID,
+
+  @UI.lineItem.position:8
+  @EndUserText.label: 'Delivery Order'
+  DeliveryOrder,
+
+  @UI.lineItem.position:9
+  @EndUserText.label: 'Company Code'
+  CompanyCode,
+
+  @Semantics.systemDate.lastChangedAt: true
+  @UI.lineItem.position:10
+  @EndUserText.label: 'Change Date'
+  LastChangeDate,
+
+  @UI.lineItem.position:11
+  @AnalyticsDetails.query.display: #KEY_TEXT
+  @UI.selectionField:[{position:7}]
+  @EndUserText.label: 'Sales Order Created Date'
+  @Consumption.filter: {selectionType: #RANGE, multipleSelections: false, mandatory: false}
+  CreationDate,
+
+  @UI.lineItem.position:12
+  @EndUserText.label: 'Sales Order Item'
+  SalesDocumentItem,
+
+  @UI.lineItem.position:12.9
+  @EndUserText.label: 'PO Item'
+  UnderlyingPurchaseOrderItem,
+
+  @UI.lineItem.position:13
+  @AnalyticsDetails.query.display: #KEY_TEXT
+  @Consumption.valueHelpDefinition: [
+   { entity:  { name:    'I_SalesDocumentItemCategory',
+                element: 'SalesDocumentItemCategory' }
+   }]
+  @UI.selectionField:[{position:14}]
+  @Consumption.filter: {selectionType: #SINGLE, multipleSelections: true, mandatory: false}
+  @ObjectModel.foreignKey.association: '_ItemCategory'
+  @EndUserText.label: 'Item Category'
+  SalesDocumentItemCategory,
+
+  @UI.lineItem.position:14
+  @ObjectModel.foreignKey.association: '_WBSElementBasicData'
+  @EndUserText.label: 'Cost Accumulator'
+  WBSElement                     as CostAccumilator,
+  @EndUserText.label: 'Cost Accumilator Desc'
+  WBSElementInternalID           as CostAccumilatorDesc,
+
+  // CG  FLOWN
+  @EndUserText.label: 'CLIN'
+  @UI.lineItem.position:15
+  Cline,
+
+  @EndUserText.label: 'ELIN'
+  @UI.lineItem.position:16
+  Eline,
+
+  @EndUserText.label: 'Cost Acct Start Date'
+  @UI.lineItem.position:17
+  CostAcctStartDate,
+
+  @EndUserText.label: 'Cost Acct End Date'
+  @UI.lineItem.position:18
+  CostAcctEndDate,
+
+  @EndUserText.label: 'Mfr. Part No.'
+  @UI.lineItem.position:19
+  MfgPartNo,
+
+  @UI.lineItem.position:20
+  @EndUserText.label: 'Item Text'
+  SalesDocumentItemText,
+
+  @EndUserText.label: 'SAP Liquid'
+  @UI.lineItem.position:21
+  MaterialByCustomer,
+  
+  @Semantics.currencyCode: true
+  @UI.lineItem.position:22
+  TransactionCurrency,
+  
+    @DefaultAggregation: #SUM
+  @Semantics.amount.currencyCode: 'TransactionCurrency'
+  @UI.lineItem.position:23
+  NetAmount,
+  
+   OrderQuantityUnit,
+  @UI.lineItem.position:24
+  @Semantics.quantity.unitOfMeasure: 'OrderQuantityUnit'
+  OrderQuantity,
+  
+    @AnalyticsDetails.query.display: #KEY_TEXT
+  @Semantics.unitOfMeasure: true
+  @UI.lineItem.position:25
+  BaseUnit, 
+
+
+
+
+  
+  @ObjectModel.foreignKey.association: '_ProfitCenter'
+  @EndUserText.label: 'Profit Center'
+  ProfitCenter,
+
+  @EndUserText.label: 'Profit Center Desc'
+  @UI.lineItem.position:26
+  ProfitCenterDesc,
+
+ // @UI.lineItem.position:28
+  @EndUserText.label: 'Business Area'
+  BusinessArea                   as pchier_BusinessArea,
+ // @UI.lineItem.position:28.5
+  @EndUserText.label: 'Business Area Desc'
+  BusinessAreaDesc,
+
+  @EndUserText.label: 'Line Of Business Desc'
+  //@UI.lineItem.position:29
+  Line_Of_Business_Desc,
+
+
+  @EndUserText.label: 'Line Of Business Desc'
+ // @UI.lineItem.position:30
+  LineOfBusinessDesc,
+
+  @EndUserText.label: 'Market Segments'
+ // @UI.lineItem.position:31
+  MarketSegments,
+  @EndUserText.label: 'Market Segments Desc'
+ // @UI.lineItem.position:32
+  MarketSegmentsDesc,
+
+  @EndUserText.label: 'Submarket'
+  //@UI.lineItem.position:33
+  Submarket,
+
+  @EndUserText.label: 'Submarket Desc'
+ // @UI.lineItem.position:34
+  SubmarketDesc,
+
+  @EndUserText.label: 'Portfolio'
+ // @UI.lineItem.position:35
+  Portfolio,
+
+  @EndUserText.label: 'Portfolio Name'
+ // @UI.lineItem.position:36
+  PortfolioName,
+
+
+  @EndUserText.label: 'FCOM Ind'
+  @UI.lineItem.position:37
+  FcomInd,
+
+  @EndUserText.label: 'Price Code'
+  @UI.lineItem.position:38
+  PriceCode,
+
+  @EndUserText.label: 'Profile'
+  @UI.lineItem.position:39
+  Profile,
+
+  @UI.lineItem.position:40
+  @AnalyticsDetails.query.display: #KEY_TEXT
+  @EndUserText.label: 'Billing Block'
+  @ObjectModel.foreignKey.association: '_ItemBillingBlockReason'
+  ItemBillingBlockReason,
+
+  @UI.lineItem.position:41
+  @AnalyticsDetails.query.display: #KEY_TEXT
+  @EndUserText.label: 'Billing Block Status'
+  @ObjectModel.foreignKey.association: '_BillingBlockStatus'
+  BillingBlockStatus,
+
+  @UI.lineItem.position:42
+  @AnalyticsDetails.query.display: #KEY_TEXT
+  @EndUserText.label: 'Billing Document Date'
+  BillingDate,
+
+
+  @UI.lineItem.position:43
+  @AnalyticsDetails.query.display: #KEY_TEXT
+  @EndUserText.label: 'Delivery Block Status'
+  @ObjectModel.foreignKey.association: '_DeliveryBlockStatus'
+  DeliveryBlockStatus,
+
+
+  @UI.lineItem.position:44
+  @AnalyticsDetails.query.display: #KEY_TEXT
+  @EndUserText.label: 'Sales Document Rjcn Reason'
+  @ObjectModel.foreignKey.association: '_SalesDocumentRjcnReason'
+  SalesDocumentRjcnReason,
+
+ // @ObjectModel.foreignKey.association: '_SDProcessStatus'
+ // @UI.lineItem.position:45
+ // @AnalyticsDetails.query.display: #KEY_TEXT
+  
+ // @EndUserText.label: 'Process Status'
+ // @Consumption.filter: {selectionType: #RANGE, multipleSelections: false, mandatory: false}
+ // SDProcessStatus,
+ 
+   // @ObjectModel.foreignKey.association: '_SDProcessStatus' 
+   @UI.lineItem.position:46
+ //  @AnalyticsDetails.query.display: #KEY_TEXT
+  @UI.selectionField:[{position:15}]
+  @EndUserText.label: 'Overall Status'
+   @Consumption.valueHelpDefinition: [
+   { entity:  { name:    'ZI_SDPROCESSSTSVH',
+                element: 'OverAllStatus' }
+   }]
+  
+  @Consumption.filter: {selectionType: #SINGLE, multipleSelections: true, mandatory: false}
+  OverAllStatus,
+  
+
+  @ObjectModel.foreignKey.association: '_SoldToParty'
+  @EndUserText.label: 'Customer'
+  //@UI.lineItem.position:50
+  SoldToParty,
+  
+  @UI.lineItem.position:52
+  @EndUserText.label: 'Customer FullName'
+  _SoldToParty.CustomerFullName,
+
+ 
+
+  //   In Parameters but  not in  Report Layout
+
+  @AnalyticsDetails.query.display: #KEY_TEXT
+  @Consumption.valueHelpDefinition: [
+   { entity:  { name:    'I_SalesDocumentType',
+                element: 'SalesDocumentType' }
+   }]
+  @UI.selectionField:[{position:5}]
+  @Consumption.filter: {selectionType: #SINGLE, multipleSelections: true, mandatory: false}
+  @EndUserText.label: 'Sales Document Type'
+  @ObjectModel.foreignKey.association: '_SalesDocumentType'
+  SalesDocumentType,
+
+
+
+  @EndUserText.label: 'Billing Plan'
+  BillingPlan,
+
+
+  @UI.selectionField:[{position:13}]
+  @Consumption.valueHelpDefinition: [
+   { entity:  { name:    'I_MaterialStdVH',
+                element: 'Material' }
+   }]
+  @ObjectModel.text.association: '_MaterialText'
+  // ]--GENERATED
+  @ObjectModel.foreignKey.association: '_Material'
+  @Consumption.filter: {selectionType:#INTERVAL, multipleSelections: true, mandatory: false}
+  @EndUserText.label: 'Material'
+  Material,
+  @EndUserText.label: 'Material Desc'
+ // @UI.lineItem.position:15.1
+  _Material._Text[1: Language = $session.system_language].MaterialName,
+
+  @ObjectModel.foreignKey.association: '_Plant'
+
+  @UI.selectionField:[{position:12}]
+  @Consumption.valueHelpDefinition: [
+   { entity:  { name:    'I_PlantStdVH',
+                element: 'Plant' }
+   }]
+  @Consumption.filter: {selectionType:#INTERVAL, multipleSelections: true, mandatory: false}
+  @EndUserText.label: 'Plant'
+  Plant,
+
+
+  @AnalyticsDetails.query.display: #KEY_TEXT
+  @UI.selectionField:[{position:8}]
+  @EndUserText.label: 'Schedule Date'
+  @Consumption.filter: {selectionType: #RANGE, multipleSelections: false, mandatory: false}
+  _ScheduleLine.ConfirmedDeliveryDate,
+
+  @EndUserText.label: 'Delivery Block Status'
+  @Semantics.contact.birthDate: true
+  //    @UI.selectionField:[{position:17}]
+  @Consumption.filter: {selectionType:  #INTERVAL, multipleSelections: false, mandatory: false}
+  CustomerPurchaseOrderDate,
+
+  @EndUserText.label: 'Requested Delivery Date'
+  @UI.selectionField:[{position:11}]
+  @Consumption.filter: {selectionType:  #INTERVAL, multipleSelections: false, mandatory: false}
+  RequestedDeliveryDate,
+
+  @ObjectModel.foreignKey.association: '_CustomerGroup'
+  @UI.selectionField:[{position:2}]
+  @EndUserText.label: 'Customer Group'
+  @Consumption.valueHelpDefinition: [
+   { entity:  { name:    'I_CustomerGroup',
+                element: 'CustomerGroup' }
+   }]
+  @Consumption.filter: {selectionType: #RANGE, multipleSelections: false, mandatory: false}
+  CustomerGroup,
+
+  
+  @EndUserText.label: 'Project Type'
+  @ObjectModel.foreignKey.association: '_ProjType'   
+  ProjectType,
+  @EndUserText.label: 'Project Type Desc'
+  ProjectTypeDesc,
+  
+   @UI.selectionField:[{position:9}]
+ // @EndUserText.label: 'Project Code'
+ // @ObjectModel.foreignKey.association: '_ProjType'
+//  @Consumption.valueHelpDefinition: [
+//   { entity:  { name:    '/CGDC/C_CTYPE',
+//                element: 'ProjectType' }
+//   }]
+  @Consumption.filter: {selectionType: #SINGLE, multipleSelections: true, mandatory: false}
+  @EndUserText.label: 'Project Code'
+    ProjectCode,
+    
+    
+    @UI.selectionField:[{position:10}]
+ // @EndUserText.label: 'Project Code'
+ // @ObjectModel.foreignKey.association: '_ProjType'
+//  @Consumption.valueHelpDefinition: [
+//   { entity:  { name:    '/CGDC/C_CTYPE',
+//                element: 'ProjectType' }
+//   }]
+  @Consumption.filter: {selectionType: #SINGLE, multipleSelections: true, mandatory: false}
+  @EndUserText.label: 'Order Type'        
+     OrderType,
+      
+  
+  
+
+  @Consumption.valueHelpDefinition: [
+   { entity:  { name:    'ZI_SUST_PROGRAM',
+                element: 'sprog' }
+   }]
+  @Consumption.filter: {selectionType: #SINGLE, multipleSelections: true, mandatory: false}
+  @ObjectModel.foreignKey.association: '_SustProg'
+  @EndUserText.label: 'Sustainment Program'
+  @UI.selectionField:[{position:3}]
+  SustainmentProgram,
+
+
+  @EndUserText.label: 'Sustainment Program Group'
+  SustainmentProgramGroup,
+
+  @EndUserText.label: 'Group WBS'
+  GroupWBS,
+
+  @Consumption.valueHelpDefinition: [
+   { entity:  { name:    'I_USER',
+                element: 'UserID' }
+   }]
+  @Consumption.filter: {selectionType: #SINGLE, multipleSelections: true, mandatory: false}
+  @ObjectModel.foreignKey.association: '_CreatedByUser'
+  @EndUserText.label: 'Sales Order Created By ID'
+  @UI.selectionField:[{position:6}]
+  CreatedByUser                  as SalesOrderCreatedUserID,
+  @EndUserText.label: 'Sales Order Created By'
+  _CreatedByUser.UserDescription as SalesOrderCreatedUser
+
+
+
+
+  //
+  //      //      //Category
+  //      //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      //      SalesDocumentType,
+  //      //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      //@UI.lineItem.position:9
+  //      //      _ItemCategory,
+  //      ////      SalesOrderItemType,
+  //      //     IsReturnsItem,
+  //
+  //      //@Semantics.currencyCode: true
+  //      //      cast(:P_DisplayCurrency as vdm_v_display_currency) as DisplayCurrency,
+  //
+  //
+  //      //Order Quantity
+  //
+  //
+  //
+  //      ////      //KPI: Incoming Sales
+  //      //      @DefaultAggregation: #SUM
+  //      //      @Semantics.amount.currencyCode: 'DisplayCurrency'
+  //      //    NetAmountInDisplayCurrency,
+  //
+  //      //      @DefaultAggregation: #SUM
+  //      //      @Semantics.amount.currencyCode: 'DisplayCurrency'
+  //      ////      IncomingSalesOrdersNetAmtInDC,
+  //      //
+  //      //    @DefaultAggregation: #SUM
+  //      //      @Semantics.quantity.unitOfMeasure: 'BaseUnit'
+  //      //      @UI.lineItem.position:12
+  //      //      vbap.kwmeng
+  //      //
+  //      //      @DefaultAggregation: #SUM
+  //      //      NumberOfIncomingSlsOrderItems,
+  //
+  //      //      @DefaultAggregation: #SUM
+  //      //      @Semantics.quantity.unitOfMeasure: 'BaseUnit'
+  //      //      ConfdDeliveryQtyInBaseUnit,
+  //
+  //      //      //Admin
+  //
+  //      //      CreatedByUser,
+  //      //      @Semantics.systemDate.createdAt: true
+  //
+  //      // CreationTime,
+  //
+  //      // @Semantics.calendar.year
+  //      //     CreationDateYear,
+  //      //      @Semantics.calendar.yearQuarter
+  //      //      CreationDateYearQuarter,
+  //      //      @AnalyticsDetails.query.axis: #COLUMNS
+  //      //      @Semantics.calendar.yearMonth
+  //      //      CreationDateYearMonth,
+  //      //      @Semantics.calendar.year
+  //      //      SalesOrderDateYear,
+  //      //      @Semantics.calendar.yearQuarter
+  //      //      SalesOrderDateYearQuarter,
+  //      //      @Semantics.calendar.yearMonth
+  //      //      SalesOrderDateYearMonth,
+  //
+  //      //Orgnization
+  //
+  //      @Consumption.filter: {selectionType: #RANGE, multipleSelections: true}
+  //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      DistributionChannel,
+  //      @Consumption.filter: {selectionType: #RANGE, multipleSelections: true}
+  //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      OrganizationDivision,
+  //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      Division,
+  //
+  //      //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      //      SalesGroup,
+  //      //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      //      @Analytics.internalName: #LOCAL
+  //      //      PartnerCompany,
+  //
+  //      //Partner
+  //      @Consumption.filter: {selectionType: #RANGE, multipleSelections: true}
+  //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      SoldToParty,
+  //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      ShipToParty,
+  //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      BillToParty,
+  //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      PayerParty,
+  //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      SalesEmployee,
+  //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      ResponsibleEmployee,
+  //
+  //      //Sales
+  //
+  //      //      CustomerRebateAgreement,
+  //      //      CustomerPurchaseOrderType,
+  //      //      CustomerPurchaseOrderDate,
+  //      //      SalesOrderDate,
+  //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      SDDocumentReason,
+  //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      CustomerGroup,
+  //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      AdditionalCustomerGroup1,
+  //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      AdditionalCustomerGroup2,
+  //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      AdditionalCustomerGroup3,
+  //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      AdditionalCustomerGroup4,
+  //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      AdditionalCustomerGroup5,
+  //      //      SalesOrderItemText,
+  //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      SalesDistrict,
+  //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      //      CreditControlArea,
+  //      //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      //      SalesDeal,
+  //      //      SalesPromotion,
+  //      //      RetailPromotion,
+  //      //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      //      SalesDocumentRjcnReason,
+  //      //
+  //
+  //      //Product
+  //      //      @UI.hidden: true
+  //      //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //
+  //
+  //      Product,
+  //      MaterialByCustomer,
+  //      Batch,
+  //      @UI.hidden: true
+  //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      //      @API.element.releaseState: #DEPRECATED
+  //      //      @API.element.successor: 'ProductGroup'
+  //      MaterialGroup,
+  //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      ProductGroup,
+  //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      AdditionalMaterialGroup1,
+  //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      AdditionalMaterialGroup2,
+  //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      AdditionalMaterialGroup3,
+  //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      AdditionalMaterialGroup4,
+  //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      AdditionalMaterialGroup5,
+  //
+  //      //      //BoM
+  //      //      MainItemPricingRefProduct,
+  //      //      HigherLevelItem,
+  //      //      BillOfMaterial,
+  //      //      PropagatePrftbltySgmt2BOM,
+  //      //      CostDeterminationIsRequired,
+  //
+  //      //      //Pricing
+  //      //      SalesOrderCondition,
+  //      //      PricingDate,
+  //      //      //ExchangeRateType,
+  //      //      //ExchangeRateDate,
+  //      //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      //      IncotermsVersion,
+  //      //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      //      IncotermsClassification,
+  //      //      IncotermsTransferLocation,
+  //      //      IncotermsLocation1,
+  //      //      IncotermsLocation2,
+  //
+  //      //Shipping
+  //      RequestedDeliveryDate,
+  //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      //      DeliveryBlockReason,
+  //      //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      DeliveryPriority,
+  //
+  //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      StorageLocation,
+  //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      ShippingPoint,
+  //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      ShippingType,
+  //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      Route,
+  //      ItemIsDeliveryRelevant,
+  //
+  //
+  //
+  //
+  //      //Payment
+  //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      CustomerPaymentTerms,
+  //      PaymentMethod,
+  //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      //      CustomerProject,
+  //
+  //      //Accounting
+  //      FiscalYear,
+  //      FiscalPeriod,
+  //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      CustomerAccountAssignmentGroup,
+  //      FixedValueDate,
+  //      AdditionalValueDays,
+  //      //      CostCenterBusinessArea,
+  //      //      CostCenter,
+  //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      ControllingArea,
+  //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      BusinessArea,
+  //
+  //
+  //
+  //      //      WBSElementExternalID,
+  //      OrderID,
+  //
+  //      //     ProfitabilitySegment,
+  //      //     ProfitabilitySegment_2,
+  //      //Reference
+  //      ReferenceSDDocument,
+  //      ReferenceSDDocumentItem,
+  //      @UI.lineItem.position:9
+  //      ReferenceSDDocumentCategory,
+  //      @Analytics.internalName: #LOCAL
+  //      BusinessSolutionOrder, --AT19May2020: Added for CE2008
+  //      //      @Analytics.internalName: #LOCAL
+  //      //      BusinessSolutionOrderItem,  --AT4.6.2020 ignore Item Reference due to framework problems
+  //
+  //      //Status
+  //      //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      //      OverallSDProcessStatus,
+  //      //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      //      OverallPurchaseConfStatus,
+  //      //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      //      OverallSDDocumentRejectionSts,
+  //      //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      //      TotalBlockStatus,
+  //      //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      //      OverallDelivConfStatus,
+  //      //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      //      OverallTotalDeliveryStatus,
+  //      //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      //      OverallDeliveryStatus,
+  //      //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      //      OverallDeliveryBlockStatus,
+  //      //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      //      OverallOrdReltdBillgStatus,
+  //      //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      //      OverallBillingBlockStatus,
+  //      //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      //      OverallTotalSDDocRefStatus,
+  //      //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      //      OverallSDDocReferenceStatus,
+  //      //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      //      TotalCreditCheckStatus,
+  //      //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      //      MaxDocValueCreditCheckStatus,
+  //      //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      //      PaymentTermCreditCheckStatus,
+  //      //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      //      FinDocCreditCheckStatus,
+  //      //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      //      ExprtInsurCreditCheckStatus,
+  //      //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      //      PaytAuthsnCreditCheckSts,
+  //      //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      //      CentralCreditCheckStatus,
+  //      //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      //      CentralCreditChkTechErrSts,
+  //      //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      //      HdrGeneralIncompletionStatus,
+  //      //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      //      OverallPricingIncompletionSts,
+  //      //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      //      HeaderDelivIncompletionStatus,
+  //      //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      //      HeaderBillgIncompletionStatus,
+  //      //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      //      OvrlItmGeneralIncompletionSts,
+  //      //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      //      OvrlItmBillingIncompletionSts,
+  //      //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      //      OvrlItmDelivIncompletionSts,
+  //
+  //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      DeliveryConfirmationStatus,
+  //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      PurchaseConfirmationStatus,
+  //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      TotalDeliveryStatus,
+  //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      DeliveryStatus,
+  //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      DeliveryBlockStatus,
+  //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      OrderRelatedBillingStatus,
+  //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      ItemGeneralIncompletionStatus,
+  //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      ItemBillingIncompletionStatus,
+  //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      PricingIncompletionStatus,
+  //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      ItemDeliveryIncompletionStatus,
+  //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      SDDocumentRejectionStatus,
+  //      @AnalyticsDetails.query.display: #KEY_TEXT
+  //      TotalSDDocReferenceStatus
+}
