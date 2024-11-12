@@ -1,0 +1,64 @@
+class ZCL_SD_VE_AR_GET_NOTES_CONCAT definition
+  public
+  final
+  create public .
+
+public section.
+
+  interfaces IF_SADL_EXIT .
+  interfaces IF_SADL_EXIT_CALC_ELEMENT_READ .
+protected section.
+private section.
+ENDCLASS.
+
+
+
+CLASS ZCL_SD_VE_AR_GET_NOTES_CONCAT IMPLEMENTATION.
+
+
+  METHOD if_sadl_exit_calc_element_read~calculate.
+    DATA : lt_ar_data TYPE STANDARD TABLE OF zc_sd_inv_open_clr_item_q WITH EMPTY KEY.
+    DATA : WA_NOTE(262143) TYPE C.
+
+    CHECK it_original_data IS NOT INITIAL.
+
+    lt_ar_data = CORRESPONDING #( it_original_data ).
+
+    LOOP AT lt_ar_data ASSIGNING FIELD-SYMBOL(<Lfs_AR_DATA>).
+
+ 
+
+          DATA(lt_notes) = cl_coll_pr_invoice_factory=>get_instance( )->get_invoice_controller(
+            EXPORTING
+              is_key                = VALUE #( companycode = <Lfs_AR_DATA>-companycode
+                                               accountingdocument  = <Lfs_AR_DATA>-accountingdocumentnumber
+                                               fiscalyear  = <Lfs_AR_DATA>-fiscalyear
+                                               accountingdocumentitem = <Lfs_AR_DATA>-AccountingDocumentItem )                 " Invoice Key
+          )->get_notes(  ).
+
+          IF LT_NOTES IS NOT    INITIAL.
+
+             sort lt_notes DESCENDING by created_ts.
+
+             LOOP AT lt_notes ASSIGNING FIELD-SYMBOL(<lt_notes>).
+
+                  CONCATENATE <lt_notes>-note WA_NOTE    INTO WA_NOTE SEPARATED BY '; '.
+
+            ENDLOOP.
+
+        ENDIF.
+
+        SHIFT WA_NOTE LEFT DELETING LEADING  '; '.
+
+        <Lfs_AR_DATA>-CollectionComments = WA_NOTE.
+
+    ENDLOOP.
+    ct_calculated_data = CORRESPONDING #( lt_ar_data ).
+
+  ENDMETHOD.
+
+
+  method IF_SADL_EXIT_CALC_ELEMENT_READ~GET_CALCULATION_INFO.
+
+  endmethod.
+ENDCLASS.
