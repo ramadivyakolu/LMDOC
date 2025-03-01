@@ -1,0 +1,22 @@
+/sap/opu/odata/sap/ZI_SALESCONTRACTITEM_Q_CDS/ZI_SALESCONTRACTITEM_Q?$filter= ((SalesDocument eq '0040000000') or (SalesDocument eq '0040000002'))
+https://ns2ds4app1.sap.global.lmco.com:44300/sap/opu/odata/sap/ZI_SALESCONTRACTITEM_Q_CDS/ZI_SALESCONTRACTITEM_Q?$filter=(SalesDocument eq '40000000')
+
+Testing Odata Channels
+•	Created by Arnett, Joseph D (US) on Dec 23, 2021
+1.	In a browser, enter the URL based on what you want to test:
+a.	To test the project, enter for the URL: “https://{System}.us.lmco.com/sap/opu/odata/sap/{Project Name}/”
+b.	To test a specific Entity Set, enter for the URL:
+“https://{System}.us.lmco.com/sap/opu/odata/sap/{Project Name}/{Entity Set name}/”
+c.	To call a single Entity, enter for the URL:
+“https://{System}.us.lmco.com/sap/opu/odata/sap/{Project Name}/{Entity Set name}({Key1}={Key1 Value},{Key2}={Key2 Value},...)”
+2.	To see specifically what data is returned/available, add “$metadata” at the end of the last “/” (no other URL parameters)
+3.	If looking to call a single entity instead of an entityset, use the following URL:
+4.	URL Parameters available for use (URL Parameters need to have a “?” at the beginning, and a “&” to separate parameters:
+NOTE: If passing in any dates, this is the format “datetime’YYYY-MM-DDTHH:MM:SS’”
+a.	$filter
+i.	Return data based on the filter applied, restricting to a field type available in the call.
+ii.	i.e. “$Filter=Emnum EQ ‘*23’ AND BDate EQ datetime’01-01-1980T00:00:00’” returns all data where Emnum ends with the value ‘23’ and BData equals January 1st, 1980.
+b.	$format
+i.	Returns the data in the format specified, like XML or JSON
+ii.	i.e. “$format=xml” “$format=json”
+
