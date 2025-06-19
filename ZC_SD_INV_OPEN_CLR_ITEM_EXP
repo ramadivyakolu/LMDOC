@@ -1,0 +1,300 @@
+@AbapCatalog.sqlViewName: 'ZCSDINVOPCLRQEXP'
+@EndUserText.label: 'Sales Open Cleared Invoices Query'
+
+@ClientHandling.algorithm: #SESSION_VARIABLE
+@AccessControl.authorizationCheck: #NOT_REQUIRED
+@Metadata.allowExtensions: true
+@Metadata.ignorePropagatedAnnotations: true
+
+
+define view ZC_SD_INV_OPEN_CLR_ITEM_EXP
+  as select from    ZI_SD_INV_OPEN_CLEARED_ITEMS as _Bseg
+
+    inner join      P_ACDOCA                     as _acdoca             on  _Bseg.CompanyCode              = _acdoca.rbukrs
+                                                                        and _Bseg.FiscalYear               = _acdoca.gjahr
+                                                                        and _Bseg.AccountingDocumentNumber = _acdoca.belnr
+                                                                        and _Bseg.AccountingDocumentItem6  = _acdoca.docln
+                                                                        and _acdoca.rldnr                  = '0L'
+
+    left outer join /CGDC/I_ACC_CFHDR_T          as CognitusJournalData on  _Bseg.CompanyCode              = CognitusJournalData.Rbukrs
+                                                                        and _Bseg.FiscalYear               = CognitusJournalData.Gjahr
+                                                                        and _Bseg.AccountingDocumentNumber = CognitusJournalData.Belnr
+                                                                        and _Bseg.AccountingDocumentItem6  = CognitusJournalData.Docln
+
+    left outer join ZI_SD_BILL_DOC_CONTRACT      as _BillContract       on _Bseg.Bseg_BillingDocumentNumber = _BillContract.BillingDocumentNumber
+  //
+  association [0..1] to I_WBSElement            as _WBSElement   on  $projection.WBSElement = _WBSElement.WBSElement
+
+  association [0..1] to I_FiscalYear            as _FiscalYears  on  $projection.FiscalYear         = _FiscalYears.FiscalYear
+                                                                 and _FiscalYears.FiscalYearVariant = 'L1'
+  association [0..1] to I_CalendarDate          as _CalendarDate on  $projection.PostingDate = _CalendarDate.CalendarDate
+
+  association [0..1] to ZI_SD_INV_PROCESS_RECEV as _ProcRecev    on  _Bseg.CompanyCode              = _ProcRecev.CompanyCode
+                                                                 and _Bseg.FiscalYear               = _ProcRecev.FiscalYear
+                                                                 and _Bseg.AccountingDocumentNumber = _ProcRecev.AccountingDocument
+                                                                 and _Bseg.AccountingDocumentItem   = _ProcRecev.AccountingDocumentItem
+
+
+  // association [0..1] to ZI_SD_CUST_VH                 as _Customervh        on  $projection.customer = _Customervh.Customer
+  //   association [0..*] to I_CollsInvoiceRelatedDsputCase as _LinkedDisputeCase            on  $projection.CompanyCode            = _LinkedDisputeCase.CompanyCode
+  //                                                                                        and $projection.AccountingDocumentNumber     = _LinkedDisputeCase.AccountingDocument
+  //                                                                                        and $projection.FiscalYear             = _LinkedDisputeCase.FiscalYear
+  //                                                                                        and $projection.AccountingDocumentItem = _LinkedDisputeCase.AccountingDocumentItem
+  //
+
+{
+
+  key   FiscalYear,
+
+  key   CompanyCode,
+  key   AccountingDocumentNumber,
+  key   AccountingDocumentItem,
+        _Bseg.BillingDocumentNumber,
+
+
+        _acdoca.poper                      as FiscalPeriod,
+
+
+        _acdoca.budat                      as PostingDate,
+
+
+        ClearingStatus,
+
+
+        ProfitCenter,
+        @EndUserText.label: 'Profit Center Desc'
+        ProfitCenterDesc,
+
+        LineOfBusiness,
+
+        LineOfBusinessDesc,
+
+        BusinessAreaDesc,
+
+        MarketSegments,
+
+        Submarket,
+
+        SubmarketDesc,
+
+        Portfolio,
+
+        PortfolioName,
+
+
+        _Bseg.Customer                     as CustomerSoldTo,
+        Payer,
+
+        PayerCustomerName                  as PayerName,
+
+        PaymentTerms,
+
+        //
+
+        case when  CognitusJournalData.Contract = '' then
+                   _BillContract.OpContractNo
+             when  CognitusJournalData.Contract  is  null then
+                   _BillContract.OpContractNo
+        else
+        CognitusJournalData.Contract   end as OperationalContractNumber,
+
+
+        CognitusJournalData.CustNumber     as CustomerContractNumber,
+
+
+        CognitusJournalData.CallNumber     as DeliveryOrder,
+
+        VoucherNumber,
+
+
+        AccountingDocumentItem6            as AccountingDocItem,
+
+
+        DocumentDate,
+
+
+        BaselineDate,
+
+
+
+        Reference                          as OriginalDocumentNumber,
+
+
+        OriginalAmount,
+
+
+        TransactionCurrency,
+
+
+        AmountInDocumentCurrency           as OpenAmtinDocCurr,
+
+
+        ShipmentNo,
+
+
+        MyInvoiceStatusHistory,
+
+
+
+        ClearingDocument,
+
+
+        ClearingDate,
+
+
+        DocumentType,
+
+
+        DocumentHeaderText,
+
+
+        CollectionSpecilist,
+
+
+        cast ('' as abap.char(1333)    )   as CollectionComments,
+
+
+        cast ('' as abap.char(1333)    )   as CollectionComments2,
+        ChartOfAccounts,
+        AmountInLocalCurrency,
+
+        Assignment,
+
+        _acdoca.ps_posid                   as WBSElement,
+        _WBSElement.WBSDescription         as WBSElementDesc,
+
+        Text,
+        DaysOutstanding                    as DaysInArrears,
+
+        @EndUserText.label: 'GLAccount'
+        GLAccount,
+
+        @EndUserText.label: 'Reference'
+        Reference,
+        @EndUserText.label: 'Conversion Invoice Number'
+        ConversionInvoiceNumber,
+
+        _ProcRecev.CollectionSegment,
+        _ProcRecev.Reference1,
+        _ProcRecev.Reference2,
+        _ProcRecev.DocumentReferenceID,
+
+
+        @EndUserText.label: 'WAWF Document Type'
+        _ProcRecev.WawfDocType             as WAWFDocumentType,
+
+
+        _ProcRecev.ActionStatus            as WAWFStatus,
+
+
+        _ProcRecev.AcceptanceDt            as WAWFAcceptanceDate,
+
+
+        _ProcRecev.ProcessedDt             as WAWFProcessedDate,
+
+
+        _ProcRecev.RejectMessages          as WAWFRejectReason,
+
+
+        _ProcRecev.ContractNbr             as WAWFContractNumber,
+
+        _ProcRecev.DeliveryOrderNbr        as WAWFDeliveryOrder,
+
+
+        _ProcRecev.BillDocNbr              as WAWFBillingDocNumber,
+
+
+        _ProcRecev.WawfInvoiceNbr          as WAWFInvoiceNumber,
+
+
+        _ProcRecev.WawfShipmentNbr         as WAWFShipmentNumber,
+
+
+        _ProcRecev.CostVoucherNbr          as WAWFVoucherNumber,
+
+
+        _ProcRecev.WawfNotifUrn,
+        _ProcRecev.WawfInvoiceDt,
+        _ProcRecev.CostVoucherDt,
+        _ProcRecev.WawfShipmentDt,
+        _ProcRecev.VendorName,
+        _ProcRecev.VendorCage,
+        _ProcRecev.PbpRequestNbr,
+        _ProcRecev.PbpRequestDt,
+        _ProcRecev.ReceiptDt,
+        _ProcRecev.ImportDt,
+        _ProcRecev.ActionRole,
+        _ProcRecev.ActionDt,
+        _ProcRecev.WawfMessages,
+        _ProcRecev.CreatedDate,
+        _ProcRecev.CreatedTime,
+        _ProcRecev.TrxSetPurpose,
+        _ProcRecev.WawfFileName,
+        _ProcRecev.BranchAccount,
+        _ProcRecev.DunningLevel,
+        _ProcRecev.LastDunningDate,
+        _ProcRecev.NetDueDate,
+        _ProcRecev.Reference1InDocumentHeader,
+        _ProcRecev.Reference2InDocumentHeader,
+        _ProcRecev.PaymentMethod,
+        _ProcRecev.FinancialAccountType,
+        //   _ProcRecev.OverdueDays,
+        _ProcRecev.CashDiscount1Days,
+        _ProcRecev.AmountInTransactionCurrency,
+        _ProcRecev.PaidAmount,
+        _ProcRecev.DunnedAmount,
+        _ProcRecev.OpenAmountInDocumentCurrency,
+        _ProcRecev.CashDiscountAmtInTransacCrcy,
+        _ProcRecev.PaymentDate,
+        _ProcRecev.DunningBlockingReason,
+        _ProcRecev.SpecialGLCode,
+        _ProcRecev.OperationalGLAccount,
+        //    _ProcRecev.FiscalPeriod,
+        _ProcRecev.BillingDocument,
+        _ProcRecev.PostingKey,
+        _ProcRecev.DocumentItemText,
+        _ProcRecev.ReferenceDocumentLogicalSystem,
+        _ProcRecev.LastDunningDurationInDays,
+        _ProcRecev.CaseStatus,
+        _ProcRecev.CaseStatusName,
+        _ProcRecev.CaseReason,
+        _ProcRecev.ReasonCodeName,
+        _ProcRecev.PromiseToPayStatus,
+        _ProcRecev.DisputeCase,
+        _ProcRecev.PromiseToPay,
+        _ProcRecev.NumberOfResubmissions,
+        _ProcRecev.NumberOfDaysSinceResubmission,
+        _ProcRecev.ArrangedAmount,
+        _ProcRecev.PromisedAmount,
+        _ProcRecev.PromiseToPayLevel,
+
+        @EndUserText.label: 'Promise To Pay DueDate'
+        _ProcRecev.PromiseToPayDueDate,
+        _ProcRecev.DisputedAmount,
+        _ProcRecev.CreditedAmount,
+        _ProcRecev.ObjectKey,
+        _ProcRecev.Country,
+        //       _ProcRecev.ResubmissionUUID,
+        //       _ProcRecev.ResubmissionDueDate,
+        //       _ProcRecev.ResubmissionReason,
+        //       _ProcRecev.CaseUniqueID,
+        //       _ProcRecev.LatePaymentRisk,
+        _ProcRecev._BillingDocument,
+        _ProcRecev._BranchAccount,
+        _ProcRecev._CollectionSegment,
+
+        _ProcRecev._DunningBlockingReasonCode,
+
+        _ProcRecev._PaymentMethod,
+        _ProcRecev._PostingKey,
+        _ProcRecev._PromiseToPayStatus,
+        _ProcRecev._SpecialGLCode
+
+        //        _Customervh
+
+        //    _LinkedDisputeCase
+
+
+
+
+}
