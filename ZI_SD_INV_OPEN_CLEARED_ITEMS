@@ -1,0 +1,223 @@
+@AbapCatalog.sqlViewName: 'ZISDINVOPENCLRC'
+@EndUserText.label: 'Sales Open Cleared Invoices'
+@VDM.viewType: #BASIC
+
+@ClientHandling.algorithm: #SESSION_VARIABLE
+@AccessControl.authorizationCheck: #NOT_REQUIRED
+
+define view ZI_SD_INV_OPEN_CLEARED_ITEMS
+  as select from           bseg                as _Bseg
+
+    left outer join             vbrk                as _VBRK               on _Bseg.vbeln = _VBRK.vbeln
+    
+    left outer  join ZSD_PRC_RECV_WORKLIST_EDIT as _PromiseToPay   on  _Bseg.bukrs = _PromiseToPay.CompanyCode
+                                                                      and _Bseg.gjahr = _PromiseToPay.FiscalYear
+                                                                      and _Bseg.belnr = _PromiseToPay.JournalEntry   
+
+//    left outer join        /CGDC/I_ACC_CFHDR_T as CognitusJournalData on  _Bseg.bukrs = CognitusJournalData.Rbukrs
+//                                                                      and _Bseg.gjahr = CognitusJournalData.Gjahr
+//                                                                      and _Bseg.belnr = CognitusJournalData.Belnr
+//                                                                      and _Bseg.buzei = CognitusJournalData.Docln
+
+    left outer to one join t001                                       on _Bseg.bukrs = t001.bukrs
+
+    inner join             bkpf                as _JournalEntry       on  _Bseg.bukrs = _JournalEntry.bukrs
+                                                                      and _Bseg.gjahr = _JournalEntry.gjahr
+                                                                      and _Bseg.belnr = _JournalEntry.belnr
+
+    left outer join        zara_coll_prctr     as _ColSpl             on _Bseg.kunnr = _ColSpl.customer_id
+    
+    left outer join  ZI_AR_MYINV_PERS  as _Myinv_Hist  on  _Bseg.bukrs = _Myinv_Hist.CompanyCode
+                                                                      and _Bseg.gjahr = _Myinv_Hist.FiscalYear
+                                                                      and _Bseg.belnr = _Myinv_Hist.AccountingDocument 
+                                                                      
+     left outer to one join ZI_PROFITCERTNER_HIER_FLAT as PRCTR_H on _Bseg.prctr = PRCTR_H.PRCTR                                                                  
+                                                                      
+    association [0..*] to I_CollectionsInvoiceMemory       as _CollectionsInvoiceNote       on  $projection.CompanyCode            = _CollectionsInvoiceNote.CompanyCode
+                                                                                        and $projection.AccountingDocumentNumber     = _CollectionsInvoiceNote.AccountingDocument
+                                                                                        and $projection.FiscalYear             = _CollectionsInvoiceNote.FiscalYear
+                                                                                        and $projection.AccountingDocumentItem = _CollectionsInvoiceNote.AccountingDocumentItem
+                                                                      
+                                                                      
+
+  association [1..1] to I_CompanyCode              as _CompanyCode     on  $projection.CompanyCode = _CompanyCode.CompanyCode
+  association [0..1] to I_FiscalYearForCompanyCode as _FiscalYear      on  $projection.FiscalYear  = _FiscalYear.FiscalYear
+                                                                       and $projection.CompanyCode = _FiscalYear.CompanyCode
+  //association [0..1] to I_FiscalYear                 as _FiscalYear                 on  $projection.FiscalYear  = _FiscalYear.FiscalYear
+  //                                                                                  and $projection.FiscalYearVariant = _FiscalYear.FiscalYearVariant
+  association [0..1] to I_ControllingArea          as _ControllingArea on  $projection.controllingarea = _ControllingArea.ControllingArea
+
+ association [0..1] to I_Customer                 as _Customer           on  $projection.Customer = _Customer.Customer
+
+  association [0..1] to I_Customer                 as _Payer           on  $projection.Payer = _Payer.Customer
+//  association [0..1] to I_Customer                 as _CustomerText    on  $projection.Customer = _CustomerText.Customer
+//  association [0..1] to I_CustomerCompany          as _CustomerCompany on  $projection.Customer    = _CustomerCompany.Customer
+//                                                                       and $projection.CompanyCode = _CustomerCompany.CompanyCode
+
+
+  association [0..1] to I_ChartOfAccounts          as _ChartOfAccounts on  $projection.ChartOfAccounts = _ChartOfAccounts.ChartOfAccounts
+
+  //    left outer join        I_SalesContractItem         as _SalesDocumentItem on  _Contract.vbeln     = _SalesDocumentItem.SalesContract
+  //                                                                             and _Contract.POSNR_ACT = _SalesDocumentItem.SalesContractItem
+  //
+  //    left outer to one join /cgdc/cf_sd_it              as flowdown           on  _Contract.vbeln     = flowdown.vbeln
+  //                                                                             and _Contract.POSNR_ACT = flowdown.posnr
+
+  //  association [1..1] to I_SalesDocument            as _SalesDocument         on  $projection.SalesDocument = _SalesDocument.SalesDocument
+  association [0..1] to I_User                     as _CreatedByUser   on  $projection.CollectionSpecilist = _CreatedByUser.UserID
+  //  association [0..1] to I_WBSElementBasicData      as _WBSElementBasicData_2 on  $projection.WBSElementInternalID = _WBSElementBasicData_2.WBSElementInternalID
+
+  association [0..*] to I_ProfitCenter             as _ProfitCenter    on  $projection.ProfitCenter      = _ProfitCenter.ProfitCenter
+                                                                       and _ProfitCenter.ControllingArea = 'LMCO'
+  //  association [0..1] to I_SalesOrganization        as _SalesOrganization     on  $projection.SalesOrganization = _SalesOrganization.SalesOrganization
+  //
+  //  association [0..1] to I_WBSElement               as _WBSElement            on  $projection.wbselement = _WBSElement.WBSElement
+  
+  //  association [0..1] to I_CalendarDate             as _CalendarDate          on  $projection.ModifiedDate = _CalendarDate.CalendarDate
+  
+  
+
+{
+      @ObjectModel.foreignKey.association: '_CompanyCode'
+  key _Bseg.bukrs                    as CompanyCode,
+
+  key _Bseg.belnr                    as AccountingDocumentNumber,
+      @ObjectModel.foreignKey.association: '_FiscalYear'
+  key _Bseg.gjahr                    as FiscalYear,
+  key _Bseg.buzei                    as AccountingDocumentItem,
+  @ObjectModel.foreignKey.association: '_Customer'
+  key   _Bseg.kunnr                    as Customer,
+  
+  cast ( lpad(_Bseg.buzei, 6, '0' ) as docln6)  as AccountingDocumentItem6,
+
+      @ObjectModel.foreignKey.association: '_ChartOfAccounts'
+      ktopl                          as ChartOfAccounts,
+      
+      
+      'LMCO' as controllingarea,
+
+      
+
+      @ObjectModel.foreignKey.association: '_ProfitCenter'
+      _Bseg.prctr                    as ProfitCenter,
+
+      @ObjectModel.foreignKey.association: '_Payer'
+      _VBRK.kunrg                    as Payer,
+      
+      _VBRK.zterm  as PaymentTerms,
+      
+      _PromiseToPay.PromisetoPayDate,
+      
+      _Payer.CustomerName as PayerCustomerName,
+
+
+  //    CognitusJournalData.CustNumber as CustomerContractNumber,
+
+  //    CognitusJournalData.CallNumber as CallNoOrDeliveryno,
+
+
+
+      case  when  _Bseg.augdt = '00000000' then 'Open'
+                 when _Bseg.augdt > '00000000' then 'Cleared'
+                 else 'Parked'
+                end                  as ClearingStatus,
+
+      _Bseg.cgdc_vchno               as VoucherNumber,
+      
+       _Bseg.vbeln as Bseg_BillingDocumentNumber,
+
+
+      _JournalEntry.xblnr            as BillingDocumentNumber,
+
+      _JournalEntry.bldat            as DocumentDate,
+
+      _Bseg.zfbdt                    as BaselineDate,
+
+      _VBRK.netwr                    as OriginalAmount,
+
+      @Semantics.currencyCode: true
+      _JournalEntry.waers            as TransactionCurrency,
+
+      @DefaultAggregation: #SUM
+      @Semantics: { amount : {currencyCode: 'TransactionCurrency'} }
+      _Bseg.wrbtr                    as AmountInDocumentCurrency,
+
+      _JournalEntry.xref1_hd         as ShipmentNo,
+
+      _Myinv_Hist.StatusHistory   as MyInvoiceStatusHistory,
+
+
+
+      @DefaultAggregation: #SUM
+      @Semantics: { amount : {currencyCode: 'TransactionCurrency'} }
+      _Bseg.dmbtr                    as AmountInLocalCurrency,
+
+      _Bseg.zuonr                    as Assignment,
+
+      //    _Bseg.zuonr as  wbselement,
+
+      _Bseg.sgtxt                    as Text,
+
+      //      '' as  ShipperID,
+
+      _Bseg.augbl                    as ClearingDocument,
+      _Bseg.augdt                    as ClearingDate,
+      _JournalEntry.blart            as DocumentType,
+      _JournalEntry.bktxt            as DocumentHeaderText,
+
+     _CollectionsInvoiceNote.OverdueDays as DaysOutstanding,
+
+      hkont                          as GLAccount,
+      _JournalEntry.xblnr            as Reference,
+
+      @ObjectModel.foreignKey.association: '_CreatedByUser'
+      _ColSpl.coll_spl               as CollectionSpecilist,
+
+      //    ''  as CollectionComments,
+
+      _Bseg.zuonr                    as ConversionInvoiceNumber,
+      
+         
+      PRCTR_H.PRCTR,
+      PRCTR_H.BusinessArea                                                                                          as BusinessArea,
+      PRCTR_H.BusinessAreaDesc as BusinessAreaDesc,
+      PRCTR_H.Line_Of_Business_Desc as LineOfBusiness,
+      
+      PRCTR_H.LineOfBusinessDesc,
+      PRCTR_H.MarketSegments,
+      PRCTR_H.MarketSegmentsDesc,
+      PRCTR_H.Submarket,
+      PRCTR_H.SubmarketDesc,
+      PRCTR_H.Portfolio,
+      PRCTR_H.PortfolioName,
+        _ProfitCenter._Text[1: Language = $session.system_language].ProfitCenterName as ProfitCenterDesc
+        ,
+//  @ObjectModel.virtualElementCalculatedBy: 'ABAP:ZCL_SD_VE_AR_GET_NOTES_CONCAT'
+//  @ObjectModel.virtualElement: true
+//  @UI.lineItem.position:200
+//  @EndUserText.label: 'Collection Specialist Comments'
+//  cast ('' as abap.char(1333)    )                                            as CollectionComments
+
+      _CompanyCode,
+      _FiscalYear,
+      _CreatedByUser,
+      _ChartOfAccounts,
+     _Customer,
+      _ProfitCenter,
+      _Payer
+
+
+
+
+
+
+
+}
+where
+    koart   =  'D'
+  and(
+    h_bstat <> 'D'
+  )
+  and(
+    h_bstat <> 'M'
+  )
