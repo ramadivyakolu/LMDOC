@@ -1,0 +1,272 @@
+REPORT ZTEST_CDS1.
+
+TYPES: BEGIN OF ty_field_info,
+         fieldname TYPE string,
+         datatype  TYPE string,
+       END OF ty_field_info.
+
+TYPES: tt_field_info TYPE TABLE OF ty_field_info,
+       tt_string     TYPE TABLE OF string.
+
+SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME TITLE TEXT-001.
+PARAMETERS: p_days   TYPE i DEFAULT 30 OBLIGATORY,
+            p_path   TYPE string.
+SELECTION-SCREEN END OF BLOCK b1.
+
+DATA: lr_data_tab    TYPE REF TO data,
+      lr_data_struct TYPE REF TO data,
+      lt_field_info  TYPE tt_field_info,
+      lv_from_date   TYPE dats,
+      lv_to_date     TYPE dats,
+      lt_csv_lines   TYPE tt_string,
+      lv_record_count TYPE i.
+
+FIELD-SYMBOLS: <lt_data> TYPE STANDARD TABLE,
+               <ls_data> TYPE any,
+               <lv_field> TYPE any.
+
+START-OF-SELECTION.
+  PERFORM calculate_date_range.
+  PERFORM get_cds_structure.
+  PERFORM fetch_open_items_data.
+  PERFORM convert_to_csv.
+  PERFORM export_to_logical_path.
+
+FORM calculate_date_range.
+  lv_to_date = sy-datum.
+  
+  CALL FUNCTION 'RP_CALC_DATE_IN_INTERVAL'
+    EXPORTING
+      date      = lv_to_date
+      days      = p_days * -1
+      months    = 0
+      signum    = '+'
+      years     = 0
+    IMPORTING
+      calc_date = lv_from_date.
+      
+  WRITE: / 'Fetching open items from:', lv_from_date, 'to', lv_to_date.
+ENDFORM.
+
+FORM get_cds_structure.
+  DATA: lr_struct_ref TYPE REF TO data,
+        lr_table_ref  TYPE REF TO data.
+        
+  FIELD-SYMBOLS: <lt_dummy> TYPE STANDARD TABLE,
+                 <ls_dummy> TYPE any.
+
+  SELECT * FROM zc_sd_inv_open_clr_item_exp
+    INTO TABLE @DATA(lt_temp)
+    UP TO 1 ROWS.
+    
+  CREATE DATA lr_data_tab TYPE STANDARD TABLE OF zc_sd_inv_open_clr_item_exp.
+  ASSIGN lr_data_tab->* TO <lt_data>.
+  
+  CREATE DATA lr_data_struct TYPE zc_sd_inv_open_clr_item_exp.
+  ASSIGN lr_data_struct->* TO <ls_data>.
+  
+  WRITE: / 'Open items CDS structure prepared for processing.'.
+ENDFORM.
+
+FORM fetch_open_items_data.
+  SELECT * FROM zc_sd_inv_open_clr_item_exp
+    INTO TABLE <lt_data>
+    WHERE postingdate BETWEEN lv_from_date AND lv_to_date
+      AND clearingdate IS INITIAL.
+      
+  lv_record_count = lines( <lt_data> ).
+  WRITE: / 'Open items fetched:', lv_record_count.
+ENDFORM.
+
+FORM convert_to_csv.
+  DATA: lv_csv_line     TYPE string,
+        lv_field_value  TYPE string,
+        lv_first_field  TYPE abap_bool,
+        lv_field_name   TYPE string.
+        
+  FIELD-SYMBOLS: <lv_value> TYPE any.
+  
+  IF lines( <lt_data> ) = 0.
+    WRITE: / 'No open items data to convert.'.
+    RETURN.
+  ENDIF.
+  
+  READ TABLE <lt_data> ASSIGNING <ls_data> INDEX 1.
+  IF sy-subrc <> 0.
+    RETURN.
+  ENDIF.
+  
+  lv_first_field = abap_true.
+  DO.
+    ASSIGN COMPONENT sy-index OF STRUCTURE <ls_data> TO <lv_value>.
+    IF sy-subrc <> 0.
+      EXIT.
+    ENDIF.
+    
+    IF lv_first_field = abap_false.
+      CONCATENATE lv_csv_line ';' INTO lv_csv_line.
+    ENDIF.
+    
+    CONCATENATE 'FIELD' sy-index INTO lv_field_name.
+    CONCATENATE lv_csv_line lv_field_name INTO lv_csv_line.
+    lv_first_field = abap_false.
+  ENDDO.
+  
+  APPEND lv_csv_line TO lt_csv_lines.
+  
+  LOOP AT <lt_data> ASSIGNING <ls_data>.
+    CLEAR: lv_csv_line, lv_first_field.
+    lv_first_field = abap_true.
+    
+    DO.
+      ASSIGN COMPONENT sy-index OF STRUCTURE <ls_data> TO <lv_value>.
+      IF sy-subrc <> 0.
+        EXIT.
+      ENDIF.
+      
+      lv_field_value = <lv_value>.
+      PERFORM clean_csv_field CHANGING lv_field_value.
+      
+      IF lv_first_field = abap_false.
+        CONCATENATE lv_csv_line ';' INTO lv_csv_line.
+      ENDIF.
+      
+      CONCATENATE lv_csv_line lv_field_value INTO lv_csv_line.
+      lv_first_field = abap_false.
+    ENDDO.
+    
+    APPEND lv_csv_line TO lt_csv_lines.
+  ENDLOOP.
+  
+  WRITE: / 'CSV lines created:', lines( lt_csv_lines ).
+ENDFORM.
+
+FORM convert_field_to_string USING iv_field TYPE any
+                                   iv_datatype TYPE string
+                             CHANGING cv_string TYPE string.
+                             
+  DATA: lv_date_char TYPE char10,
+        lv_time_char TYPE char8.
+  
+  CLEAR cv_string.
+  
+  CASE iv_datatype.
+    WHEN 'D'.
+      IF iv_field IS NOT INITIAL.
+        WRITE iv_field TO lv_date_char.
+        cv_string = lv_date_char.
+      ENDIF.
+      
+    WHEN 'T'.
+      IF iv_field IS NOT INITIAL.
+        WRITE iv_field TO lv_time_char.
+        cv_string = lv_time_char.
+      ENDIF.
+      
+    WHEN 'P'.
+      IF iv_field IS NOT INITIAL.
+        cv_string = |{ iv_field DECIMALS = 2 }|.
+      ENDIF.
+      
+    WHEN 'I' OR 'b' OR 's'.
+      IF iv_field IS NOT INITIAL.
+        cv_string = |{ iv_field }|.
+      ENDIF.
+      
+    WHEN 'F'.
+      IF iv_field IS NOT INITIAL.
+        cv_string = |{ iv_field }|.
+      ENDIF.
+      
+    WHEN OTHERS.
+      cv_string = |{ iv_field }|.
+  ENDCASE.
+  
+  CONDENSE cv_string.
+ENDFORM.
+
+FORM clean_csv_field CHANGING cv_field TYPE string.
+  REPLACE ALL OCCURRENCES OF ';' IN cv_field WITH ','.
+  REPLACE ALL OCCURRENCES OF '"' IN cv_field WITH ''''.
+  REPLACE ALL OCCURRENCES OF cl_abap_char_utilities=>cr_lf IN cv_field WITH ' '.
+  REPLACE ALL OCCURRENCES OF cl_abap_char_utilities=>newline IN cv_field WITH ' '.
+  REPLACE ALL OCCURRENCES OF cl_abap_char_utilities=>horizontal_tab IN cv_field WITH ' '.
+  
+  IF cv_field CS ',' OR cv_field CS ' '.
+    CONCATENATE '"' cv_field '"' INTO cv_field.
+  ENDIF.
+ENDFORM.
+
+FORM export_to_logical_path.
+  DATA: lv_physical_path TYPE string,
+        lv_filename      TYPE string,
+        lv_timestamp     TYPE string.
+        
+  CONCATENATE sy-datum sy-uzeit INTO lv_timestamp.
+  CONCATENATE 'open_items_export_' lv_timestamp '.csv' INTO lv_filename.
+  
+  CALL FUNCTION 'FILE_GET_NAME'
+    EXPORTING
+      logical_filename = CONV #( p_path )
+      file_name        = lv_filename
+    IMPORTING
+      file_name        = lv_physical_path
+    EXCEPTIONS
+      file_not_found   = 1
+      OTHERS           = 2.
+      
+  IF sy-subrc <> 0.
+    CONCATENATE p_path '/' lv_filename INTO lv_physical_path.
+  ENDIF.
+  
+  PERFORM write_csv_file USING lv_physical_path.
+ENDFORM.
+
+FORM write_csv_file USING iv_filepath TYPE string.
+  DATA: lv_line TYPE string.
+  
+  TRY.
+      OPEN DATASET iv_filepath FOR OUTPUT IN TEXT MODE ENCODING UTF-8.
+      
+      LOOP AT lt_csv_lines INTO lv_line.
+        TRANSFER lv_line TO iv_filepath.
+      ENDLOOP.
+      
+      CLOSE DATASET iv_filepath.
+      
+      WRITE: / 'SUCCESS: Open items CSV file exported to:', iv_filepath.
+      WRITE: / 'Total open items exported:', lv_record_count.
+      
+      MESSAGE s001(z_custom) WITH 'Open items file exported:' iv_filepath.
+      
+    CATCH cx_sy_file_open_mode.
+      WRITE: / 'ERROR: Cannot open file:', iv_filepath.
+      MESSAGE e002(z_custom) WITH 'Error opening file:' iv_filepath.
+      
+    CATCH cx_sy_codepage_converter_init.
+      WRITE: / 'ERROR: Encoding issue with file:', iv_filepath.
+      MESSAGE e003(z_custom) WITH 'Error with file encoding:' iv_filepath.
+      
+    CATCH cx_sy_conversion_codepage.
+      WRITE: / 'ERROR: Character conversion error:', iv_filepath.
+      MESSAGE e004(z_custom) WITH 'Error with character conversion:' iv_filepath.
+      
+    CATCH cx_sy_file_authority.
+      WRITE: / 'ERROR: No authorization for file:', iv_filepath.
+      MESSAGE e005(z_custom) WITH 'No authority to write file:' iv_filepath.
+      
+    CATCH cx_root INTO DATA(lx_error).
+      WRITE: / 'ERROR: Unexpected error:', lx_error->get_text( ).
+      MESSAGE e006(z_custom) WITH 'Unexpected error:' lx_error->get_text( ).
+  ENDTRY.
+ENDFORM.
+
+FORM export_to_direct_path.
+  DATA: lv_filepath TYPE string,
+        lv_timestamp TYPE string.
+        
+  CONCATENATE sy-datum sy-uzeit INTO lv_timestamp.
+  CONCATENATE p_path '/open_items_export_' lv_timestamp '.csv' INTO lv_filepath.
+  
+  PERFORM write_csv_file USING lv_filepath.
+ENDFORM.
