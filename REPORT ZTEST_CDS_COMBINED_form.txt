@@ -1,0 +1,431 @@
+REPORT ZTEST_CDS_COMBINED.
+
+TYPES: BEGIN OF ty_field_info,
+         fieldname TYPE string,
+         datatype  TYPE string,
+       END OF ty_field_info,
+       tt_field_info TYPE TABLE OF ty_field_info,
+       tt_string     TYPE TABLE OF string WITH DEFAULT KEY.
+
+TYPES: BEGIN OF ty_date_range,
+         from_date TYPE dats,
+         to_date   TYPE dats,
+       END OF ty_date_range.
+
+TYPES: BEGIN OF ty_processing_config,
+         mode        TYPE string,
+         cds_name    TYPE string,
+         file_prefix TYPE string,
+         days        TYPE i,
+       END OF ty_processing_config.
+
+TYPES: BEGIN OF ty_export_result,
+         success      TYPE abap_bool,
+         filepath     TYPE string,
+         record_count TYPE i,
+         message      TYPE string,
+       END OF ty_export_result.
+
+SELECTION-SCREEN BEGIN OF BLOCK b1 WITH FRAME TITLE TEXT-001.
+  PARAMETERS: p_clrdt TYPE dats DEFAULT sy-datum OBLIGATORY.
+SELECTION-SCREEN END OF BLOCK b1.
+
+SELECTION-SCREEN BEGIN OF BLOCK b2 WITH FRAME TITLE TEXT-002.
+  PARAMETERS: r_open  TYPE abap_bool RADIOBUTTON GROUP grp1 DEFAULT 'X',
+              r_clear TYPE abap_bool RADIOBUTTON GROUP grp1.
+SELECTION-SCREEN END OF BLOCK b2.
+
+SELECTION-SCREEN BEGIN OF BLOCK b3 WITH FRAME TITLE TEXT-003.
+  PARAMETERS: p_days TYPE i DEFAULT 3 MODIF ID dy1,
+              p_path TYPE string OBLIGATORY.
+SELECTION-SCREEN END OF BLOCK b3.
+
+*----------------------------------------------------------------------*
+* Date Range Calculation Forms
+*----------------------------------------------------------------------*
+FORM calculate_range USING iv_to_date TYPE dats
+                           iv_days TYPE i
+                     CHANGING rs_range TYPE ty_date_range.
+  
+  rs_range-to_date = iv_to_date.
+
+  CALL FUNCTION 'RP_CALC_DATE_IN_INTERVAL'
+    EXPORTING
+      date      = iv_to_date
+      days      = iv_days * -1
+      months    = 0
+      signum    = '+'
+      years     = 0
+    IMPORTING
+      calc_date = rs_range-from_date.
+      
+ENDFORM.
+
+FORM format_date_for_display USING iv_date TYPE dats
+                             CHANGING rv_formatted TYPE string.
+  rv_formatted = |{ iv_date DATE = USER }|.
+ENDFORM.
+
+
+FORM build_open_items_config USING iv_clearing_date TYPE dats
+                             CHANGING rs_config TYPE ty_processing_config.
+  rs_config = VALUE #(
+    mode = 'OPEN'
+    cds_name = 'ZC_SD_INV_OPEN_CLR_ITEM_EXP'
+    file_prefix = 'open_items_export'
+    days = 30
+  ).
+ENDFORM.
+
+FORM build_cleared_items_config USING iv_clearing_date TYPE dats
+                                      iv_days TYPE i
+                                CHANGING rs_config TYPE ty_processing_config.
+  rs_config = VALUE #(
+    mode = 'CLEARED'
+    cds_name = 'ZI_SD_INV_OPEN_CLEARED_ITEMS'
+    file_prefix = 'cleared_items_export'
+    days = iv_days
+  ).
+ENDFORM.
+
+
+FORM fetch_open_items USING is_date_range TYPE ty_date_range
+                      CHANGING rr_data TYPE REF TO data.
+  
+  DATA: lr_data_tab TYPE REF TO data.
+  FIELD-SYMBOLS: <lt_data> TYPE STANDARD TABLE.
+
+  CREATE DATA lr_data_tab TYPE STANDARD TABLE OF zc_sd_inv_open_clr_item_exp.
+  ASSIGN lr_data_tab->* TO <lt_data>.
+
+  SELECT * FROM zc_sd_inv_open_clr_item_exp
+    INTO TABLE <lt_data>
+    WHERE postingdate BETWEEN is_date_range-from_date AND is_date_range-to_date
+      AND clearingdate IS INITIAL.
+
+  rr_data = lr_data_tab.
+ENDFORM.
+
+FORM fetch_cleared_items USING is_date_range TYPE ty_date_range
+                         CHANGING rr_data TYPE REF TO data.
+  
+  DATA: lr_data_tab TYPE REF TO data.
+  FIELD-SYMBOLS: <lt_data> TYPE STANDARD TABLE.
+
+  CREATE DATA lr_data_tab TYPE STANDARD TABLE OF zi_sd_inv_open_cleared_items.
+  ASSIGN lr_data_tab->* TO <lt_data>.
+
+  DATA(lv_date) = is_date_range-to_date - p_days.
+
+  SELECT * FROM zi_sd_inv_open_cleared_items
+    INTO TABLE <lt_data>
+    WHERE clearingdate BETWEEN is_date_range-from_date AND is_date_range-to_date.
+
+  rr_data = lr_data_tab.
+ENDFORM.
+
+FORM create_data_structure USING iv_mode TYPE string
+                           CHANGING rr_struct TYPE REF TO data.
+  CASE iv_mode.
+    WHEN 'OPEN'.
+      CREATE DATA rr_struct TYPE zc_sd_inv_open_clr_item_exp.
+    WHEN 'CLEARED'.
+      CREATE DATA rr_struct TYPE zi_sd_inv_open_cleared_items.
+  ENDCASE.
+ENDFORM.
+
+
+FORM transform_to_csv USING ir_data TYPE REF TO data
+                      CHANGING rt_csv_lines TYPE tt_string.
+  
+  DATA: lr_structure TYPE REF TO data,
+        lv_header TYPE string,
+        lt_data_lines TYPE tt_string.
+  FIELD-SYMBOLS: <lt_data> TYPE STANDARD TABLE,
+                 <ls_data> TYPE any.
+
+  ASSIGN ir_data->* TO <lt_data>.
+
+  IF lines( <lt_data> ) = 0.
+    RETURN.
+  ENDIF.
+
+  READ TABLE <lt_data> ASSIGNING <ls_data> INDEX 1.
+  GET REFERENCE OF <ls_data> INTO lr_structure.
+
+  PERFORM create_header_line USING lr_structure CHANGING lv_header.
+  APPEND lv_header TO rt_csv_lines.
+
+  PERFORM create_data_lines USING ir_data CHANGING lt_data_lines.
+  APPEND LINES OF lt_data_lines TO rt_csv_lines.
+ENDFORM.
+
+FORM create_header_line USING ir_structure TYPE REF TO data
+                        CHANGING rv_header TYPE string.
+  
+  DATA: lv_line         TYPE string,
+        lv_first        TYPE abap_bool VALUE abap_true,
+        lv_display_name TYPE string,
+        lr_struct_descr TYPE REF TO cl_abap_structdescr,
+        lt_components   TYPE cl_abap_structdescr=>component_table.
+  FIELD-SYMBOLS: <ls_structure> TYPE any.
+
+  ASSIGN ir_structure->* TO <ls_structure>.
+
+  lr_struct_descr ?= cl_abap_typedescr=>describe_by_data( <ls_structure> ).
+  lt_components = lr_struct_descr->get_components( ).
+
+  LOOP AT lt_components INTO DATA(ls_component).
+    IF lv_first = abap_false.
+      lv_line = |{ lv_line };|.
+    ENDIF.
+
+    IF to_upper( ls_component-name ) = 'VBELN'.
+      lv_display_name = 'Sales Document'.
+    ELSE.
+      lv_display_name = ls_component-name.
+    ENDIF.
+
+    lv_line = |{ lv_line }{ lv_display_name }|.
+    lv_first = abap_false.
+  ENDLOOP.
+
+  rv_header = lv_line.
+ENDFORM.
+
+FORM create_data_lines USING ir_data TYPE REF TO data
+                       CHANGING rt_lines TYPE tt_string.
+  
+  FIELD-SYMBOLS: <lt_data> TYPE STANDARD TABLE,
+                 <ls_data> TYPE any.
+
+  DATA: lr_structure TYPE REF TO data,
+        lv_line TYPE string.
+
+  ASSIGN ir_data->* TO <lt_data>.
+
+  LOOP AT <lt_data> ASSIGNING <ls_data>.
+    GET REFERENCE OF <ls_data> INTO lr_structure.
+    PERFORM structure_to_csv_line USING lr_structure CHANGING lv_line.
+    APPEND lv_line TO rt_lines.
+  ENDLOOP.
+ENDFORM.
+
+FORM structure_to_csv_line USING ir_structure TYPE REF TO data
+                           CHANGING rv_line TYPE string.
+  
+  DATA: lv_line  TYPE string,
+        lv_first TYPE abap_bool VALUE abap_true,
+        lv_value TYPE string,
+        lv_clean TYPE string.
+  FIELD-SYMBOLS: <ls_structure> TYPE any,
+                 <lv_field>     TYPE any.
+
+  ASSIGN ir_structure->* TO <ls_structure>.
+
+  DO.
+    ASSIGN COMPONENT sy-index OF STRUCTURE <ls_structure> TO <lv_field>.
+    IF sy-subrc <> 0.
+      EXIT.
+    ENDIF.
+
+    lv_value = |{ <lv_field> }|.
+    PERFORM clean_field_value USING lv_value CHANGING lv_clean.
+
+    IF lv_first = abap_false.
+      lv_line = |{ lv_line };|.
+    ENDIF.
+
+    lv_line = |{ lv_line }{ lv_clean }|.
+    lv_first = abap_false.
+  ENDDO.
+
+  rv_line = lv_line.
+ENDFORM.
+
+FORM clean_field_value USING iv_value TYPE string
+                       CHANGING rv_clean TYPE string.
+  rv_clean = iv_value.
+
+  rv_clean = replace( val = rv_clean sub = ';' with = ',' occ = 0 ).
+  rv_clean = replace( val = rv_clean sub = '"' with = '''' occ = 0 ).
+  rv_clean = replace( val = rv_clean sub = cl_abap_char_utilities=>cr_lf with = ' ' occ = 0 ).
+  rv_clean = replace( val = rv_clean sub = cl_abap_char_utilities=>newline with = ' ' occ = 0 ).
+  rv_clean = replace( val = rv_clean sub = cl_abap_char_utilities=>horizontal_tab with = ' ' occ = 0 ).
+
+  IF rv_clean CS ',' OR rv_clean CS ' '.
+    rv_clean = |"{ rv_clean }"|.
+  ENDIF.
+ENDFORM.
+
+
+FORM export_csv USING it_csv_lines TYPE tt_string
+                      iv_path TYPE string
+                      iv_prefix TYPE string
+                CHANGING rs_result TYPE ty_export_result.
+  
+  DATA: lv_filename TYPE string,
+        lv_physical_path TYPE string.
+
+  PERFORM generate_filename USING iv_prefix CHANGING lv_filename.
+  PERFORM resolve_physical_path USING iv_path lv_filename CHANGING lv_physical_path.
+  PERFORM write_file USING it_csv_lines lv_physical_path CHANGING rs_result.
+  
+  rs_result-filepath = lv_physical_path.
+ENDFORM.
+
+FORM generate_filename USING iv_prefix TYPE string
+                       CHANGING rv_filename TYPE string.
+  DATA(lv_timestamp) = |{ sy-datum }{ sy-uzeit }|.
+  rv_filename = |{ iv_prefix }_{ lv_timestamp }.csv|.
+ENDFORM.
+
+FORM resolve_physical_path USING iv_logical_path TYPE string
+                                 iv_filename TYPE string
+                           CHANGING rv_physical_path TYPE string.
+  
+  CALL FUNCTION 'FILE_GET_NAME'
+    EXPORTING
+      logical_filename = CONV fileintern( iv_logical_path )
+      file_name        = iv_filename
+    IMPORTING
+      file_name        = rv_physical_path
+    EXCEPTIONS
+      file_not_found   = 1
+      OTHERS           = 2.
+
+  IF sy-subrc <> 0.
+    rv_physical_path = |{ iv_logical_path }/{ iv_filename }|.
+  ENDIF.
+ENDFORM.
+
+FORM write_file USING it_lines TYPE tt_string
+                      iv_filepath TYPE string
+                CHANGING rs_result TYPE ty_export_result.
+  
+  rs_result-record_count = lines( it_lines ) - 1. " Subtract header
+
+  TRY.
+      OPEN DATASET iv_filepath FOR OUTPUT IN TEXT MODE ENCODING UTF-8.
+
+      LOOP AT it_lines INTO DATA(lv_line).
+        TRANSFER lv_line TO iv_filepath.
+      ENDLOOP.
+
+      CLOSE DATASET iv_filepath.
+
+      rs_result-success = abap_true.
+      rs_result-message = |File exported successfully: { iv_filepath }|.
+
+    CATCH cx_sy_file_open_mode.
+      rs_result-success = abap_false.
+      rs_result-message = |Error opening file: { iv_filepath }|.
+
+    CATCH cx_sy_codepage_converter_init.
+      rs_result-success = abap_false.
+      rs_result-message = |Encoding error: { iv_filepath }|.
+
+    CATCH cx_sy_conversion_codepage.
+      rs_result-success = abap_false.
+      rs_result-message = |Character conversion error: { iv_filepath }|.
+
+    CATCH cx_sy_file_authority.
+      rs_result-success = abap_false.
+      rs_result-message = |No authorization for file: { iv_filepath }|.
+
+    CATCH cx_root INTO DATA(lx_error).
+      rs_result-success = abap_false.
+      rs_result-message = |Unexpected error: { lx_error->get_text( ) }|.
+  ENDTRY.
+ENDFORM.
+
+FORM process_invoice_export USING iv_clearing_date TYPE dats
+                                  iv_is_open_mode TYPE abap_bool
+                                  iv_days TYPE i
+                                  iv_export_path TYPE string
+                            CHANGING rs_result TYPE ty_export_result.
+  
+  DATA: lv_valid TYPE abap_bool,
+        ls_config TYPE ty_processing_config,
+        lr_date_range TYPE ty_date_range,
+        lr_data TYPE REF TO data,
+        lt_csv_lines TYPE tt_string.
+
+  PERFORM validate_inputs USING iv_clearing_date iv_is_open_mode iv_days iv_export_path
+                          CHANGING lv_valid.
+
+  IF lv_valid = abap_false.
+    rs_result-success = abap_false.
+    rs_result-message = 'Input validation failed'.
+    RETURN.
+  ENDIF.
+
+  IF iv_is_open_mode = abap_true.
+    PERFORM build_open_items_config USING iv_clearing_date CHANGING ls_config.
+  ELSE.
+    PERFORM build_cleared_items_config USING iv_clearing_date iv_days CHANGING ls_config.
+  ENDIF.
+
+  PERFORM calculate_range USING iv_clearing_date ls_config-days CHANGING lr_date_range.
+  PERFORM get_data_by_mode USING ls_config lr_date_range CHANGING lr_data.
+  PERFORM transform_to_csv USING lr_data CHANGING lt_csv_lines.
+  PERFORM export_csv USING lt_csv_lines iv_export_path ls_config-file_prefix CHANGING rs_result.
+ENDFORM.
+
+FORM validate_inputs USING iv_clearing_date TYPE dats
+                            iv_is_open_mode TYPE abap_bool
+                            iv_days TYPE i
+                            iv_export_path TYPE string
+                     CHANGING rv_valid TYPE abap_bool.
+  
+  rv_valid = COND #(
+    WHEN iv_clearing_date IS INITIAL THEN abap_false
+    WHEN iv_export_path IS INITIAL THEN abap_false
+    WHEN iv_is_open_mode = abap_false AND iv_days IS INITIAL THEN abap_false
+    ELSE abap_true
+  ).
+ENDFORM.
+
+FORM get_data_by_mode USING is_config TYPE ty_processing_config
+                            is_date_range TYPE ty_date_range
+                      CHANGING rr_data TYPE REF TO data.
+  
+  IF is_config-mode = 'OPEN'.
+    PERFORM fetch_open_items USING is_date_range CHANGING rr_data.
+  ELSE.
+    PERFORM fetch_cleared_items USING is_date_range CHANGING rr_data.
+  ENDIF.
+ENDFORM.
+
+FORM modify_screen_fields.
+  LOOP AT SCREEN.
+    CASE screen-group1.
+      WHEN 'DY1'.
+        screen-active = COND #( WHEN r_open = 'X' THEN 0 ELSE 1 ).
+        MODIFY SCREEN.
+    ENDCASE.
+  ENDLOOP.
+ENDFORM.
+
+FORM display_result USING is_result TYPE ty_export_result.
+  IF is_result-success = abap_true.
+    WRITE: / 'SUCCESS:', is_result-message.
+    WRITE: / 'Records exported:', is_result-record_count.
+    MESSAGE 'Export completed' TYPE 'S'.
+  ELSE.
+    WRITE: / 'ERROR:', is_result-message.
+    MESSAGE 'Export failed:' TYPE 'E'.
+  ENDIF.
+ENDFORM.
+
+
+AT SELECTION-SCREEN OUTPUT.
+  PERFORM modify_screen_fields.
+
+START-OF-SELECTION.
+  DATA: ls_result TYPE ty_export_result.
+  
+  PERFORM process_invoice_export USING p_clrdt r_open p_days p_path
+                                 CHANGING ls_result.
+  
+  PERFORM display_result USING ls_result.
