@@ -1,0 +1,104 @@
+SELECTION-SCREEN BEGIN OF BLOCK b2 WITH FRAME TITLE TEXT-002.
+  PARAMETERS: r_open  TYPE abap_bool RADIOBUTTON GROUP grp1 DEFAULT 'X'  USER-COMMAND dy1,
+              r_clear TYPE abap_bool RADIOBUTTON GROUP grp1  MODIF ID dy1.
+SELECTION-SCREEN END OF BLOCK b2.
+
+SELECTION-SCREEN BEGIN OF BLOCK b3 WITH FRAME TITLE TEXT-003.
+  PARAMETERS: p_days TYPE i DEFAULT 3 MODIF ID dy2,
+              p_path TYPE string OBLIGATORY LOWER CASE.
+SELECTION-SCREEN END OF BLOCK b3.
+
+
+FORM calculate_range USING iv_to_date TYPE dats
+                           iv_days TYPE i
+                     CHANGING rs_range TYPE ty_date_range.
+
+  rs_range-to_date = iv_to_date.
+
+  CALL FUNCTION 'CALCULATE_DATE'
+    EXPORTING
+      days        = ( iv_days * -1 )
+      months      = '0'
+      start_date  = iv_to_date
+    IMPORTING
+      result_date = rs_range-from_date.
+
+
+ENDFORM.
+
+
+FORM build_cleared_items_config USING iv_clearing_date TYPE dats
+                                      iv_days TYPE i
+                                CHANGING rs_config TYPE ty_processing_config.
+  rs_config = VALUE #(
+    mode = 'CLEARED'
+    cds_name = 'ZI_SD_INV_OPEN_CLEARED_ITEMS'
+    file_prefix = 'cleared_items'
+    days = iv_days
+  ).
+ENDFORM.
+
+
+FORM generate_filename USING iv_prefix TYPE string
+                       CHANGING rv_filename TYPE string.
+  DATA(lv_timestamp) = |{ sy-datum }{ sy-uzeit }|.
+  rv_filename = |{ iv_prefix }.csv|.
+ENDFORM.
+
+
+FORM write_file USING it_lines TYPE tt_string
+                      iv_filepath TYPE string
+                CHANGING rs_result TYPE ty_export_result.
+
+  rs_result-record_count = lines( it_lines ) - 1.
+
+  TRY.
+
+      OPEN DATASET iv_filepath FOR INPUT IN TEXT MODE ENCODING UTF-8.
+      IF sy-subrc = 0.
+        CLOSE DATASET iv_filepath.
+
+        DELETE DATASET iv_filepath.
+        IF sy-subrc = 0.
+        ENDIF.
+      ENDIF.
+
+      OPEN DATASET iv_filepath FOR INPUT IN TEXT MODE ENCODING UTF-8.
+
+      IF sy-subrc <> 0.
+
+        OPEN DATASET iv_filepath FOR OUTPUT IN TEXT MODE ENCODING DEFAULT.
+
+        LOOP AT it_lines INTO DATA(lv_line).
+          TRANSFER lv_line TO iv_filepath.
+        ENDLOOP.
+
+        CLOSE DATASET iv_filepath.
+
+        rs_result-success = abap_true.
+        rs_result-message = |File exported successfully: { iv_filepath }|.
+
+      ENDIF.
+
+    CATCH cx_sy_file_open_mode.
+      rs_result-success = abap_false.
+      rs_result-message = |Error opening file: { iv_filepath }|.
+
+    CATCH cx_sy_codepage_converter_init.
+      rs_result-success = abap_false.
+      rs_result-message = |Encoding error: { iv_filepath }|.
+
+    CATCH cx_sy_conversion_codepage.
+      rs_result-success = abap_false.
+      rs_result-message = |Character conversion error: { iv_filepath }|.
+
+    CATCH cx_sy_file_authority.
+      rs_result-success = abap_false.
+      rs_result-message = |No authorization for file: { iv_filepath }|.
+
+    CATCH cx_root INTO DATA(lx_error).
+      rs_result-success = abap_false.
+      rs_result-message = |Unexpected error: { lx_error->get_text( ) }|.
+  ENDTRY.
+
+ENDFORM.
